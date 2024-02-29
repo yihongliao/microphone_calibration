@@ -1,5 +1,5 @@
-from noisereduce.spectralgate.stationary import SpectralGateStationary
-from noisereduce.spectralgate.nonstationary import SpectralGateNonStationary
+from mynoisereduce.spectralgate.stationary import SpectralGateStationary
+from mynoisereduce.spectralgate.nonstationary import SpectralGateNonStationary
 
 try:
     import torch
@@ -7,7 +7,7 @@ try:
 except ImportError:
     TORCH_AVAILABLE = False
 if TORCH_AVAILABLE:
-    from noisereduce.spectralgate.streamed_torch_gate import StreamedTorchGate
+    from mynoisereduce.spectralgate.streamed_torch_gate import StreamedTorchGate
 
 
 def reduce_noise(

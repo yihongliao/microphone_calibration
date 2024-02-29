@@ -1,4 +1,4 @@
-from noisereduce.spectralgate.base import SpectralGate
+from mynoisereduce.spectralgate.base import SpectralGate
 import numpy as np
 from librosa import stft, istft
 from scipy.signal import filtfilt, fftconvolve

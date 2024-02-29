@@ -4,7 +4,7 @@ import time
 from scipy.io import wavfile
 import sys
 sys.path.append(os.path.join(os.path.dirname(__file__), 'mynoisereduce'))
-import noisereduce.noisereduce as nr
+import mynoisereduce as mnr
 
 # import noisereduce as nr
 import numpy as np
@@ -35,7 +35,7 @@ alpha = np.sqrt(Es/(10**(snr/10)*En))
 noisy_signal = signal+alpha*noise
 
 # perform noise reduction
-processed_audio = nr.reduce_noise(y=noisy_signal, y_noise=noise, stationary=True, sr=fs, n_std_thresh_stationary=1.0)
+processed_audio = mnr.reduce_noise(y=noisy_signal, y_noise=noise, stationary=True, sr=fs, n_std_thresh_stationary=1.0)
 # wavfile.write("mywav_reduced_noise.wav", fs, processed_audio)
 # wavfile.write("mywav_clean_signal.wav", fs, signal)
 # wavfile.write("mywav_noise_signal.wav", fs, alpha*noise)

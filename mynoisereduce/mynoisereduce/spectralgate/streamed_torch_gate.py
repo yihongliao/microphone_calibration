@@ -1,6 +1,6 @@
 import torch
-from noisereduce.spectralgate.base import SpectralGate
-from noisereduce.torchgate import TorchGate as TG
+from mynoisereduce.spectralgate.base import SpectralGate
+from mynoisereduce.torchgate import TorchGate as TG
 import numpy as np
 
 
