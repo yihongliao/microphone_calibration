@@ -296,6 +296,19 @@ def AFRC(y, K=1024):
 
     return g, G
 
+def generate_mic_array_movements(rows, cols, d):
+    coordinates = []
+
+    for i in range(rows):
+        if i % 2 == 0:
+            for j in range(cols):
+                coordinates.append((i*d, 0, j*d))
+        else:
+            for j in range(cols - 1, -1, -1):
+                coordinates.append((i*d, 0, j*d))
+
+    return np.array(coordinates).T
+
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(
         description="Simulates and adds reverberation to a dry sound sample. Saves it into `./examples/samples`."
@@ -325,11 +338,12 @@ if __name__ == "__main__":
     num_of_mics = 4
 
     # The desired reverberation time and dimensions of the room
-    SNRs = [5.0, 15.0, 25.0, 35.0]  # signal-to-noise ratio in dB
+    SNRs = [25.0, 35.0]  # signal-to-noise ratio in dB
     rt60_tgts = [0.2, 0.3, 0.4, 0.5, 0.6]  # seconds
     trials = 1
     room_dim = [7.1, 6.0, 3.0]  # meters
-    d = 0
+    d = 0.126
+    precision = 0
     signal_range = [fs*10, fs*20]
 
     plot_figure = args.plot
@@ -337,7 +351,7 @@ if __name__ == "__main__":
     evaluate = args.evaluate
     write_eval_result = args.write
     add_noise = True
-    denoise = True
+    denoise = False
     n_std_thresh_stationary = 0
 
     # import a mono wavfile as the source signal
@@ -407,6 +421,9 @@ if __name__ == "__main__":
 
     # plt.show()
         
+    ###############################################################################################################
+    # Start simulation
+    ###############################################################################################################
     for SNR in SNRs:
         for rt60_tgt in rt60_tgts:
             alphaAs = []
@@ -414,63 +431,132 @@ if __name__ == "__main__":
             for k in range(trials):
                 if calibration:
                     print("d: ", d, " SNR: ", SNR, " RT60: ", rt60_tgt, " Trial: ", k)
-                    ###############################################################################################################
-                    # Create the room
-                    ###############################################################################################################
+
+                    original_signals = []
+                    noisy_signals = []
+                    denoised_signals = []
+                    calib_signals = []
+                    
                     # We invert Sabine's formula to obtain the parameters for the ISM simulator
                     e_absorption, max_order = pra.inverse_sabine(rt60_tgt, room_dim)
 
-                    if args.method == "ism":
-                        room = pra.ShoeBox(
-                            room_dim, fs=fs, materials=pra.Material(e_absorption), max_order=max_order
-                        )
-                    elif args.method == "hybrid":
-                        room = pra.ShoeBox(
-                            room_dim,
-                            fs=fs,
-                            materials=pra.Material(e_absorption),
-                            max_order=3,
-                            ray_tracing=True,
-                            air_absorption=True,
-                        )
-                    elif args.method == "anechoic":
-                        room = pra.AnechoicRoom(3, fs=fs)
+                    mic_array_movements = generate_mic_array_movements(2, 2, d)
+                    mic_array_initial_loc = np.c_[
+                            [2.45, 2.8, 1.3], [2.45, 2.8, 1.3-d], [2.45-d, 2.8, 1.3-d], [2.45-d, 2.8, 1.3]
+                        ]
 
-                    # place the source in the room
-                    room.add_source([2.45, 2.3, 1.3], signal=audio)
-
-                    ###############################################################################################################
-                    # Add microphones
-                    ###############################################################################################################
-                    # define the locations of the microphones
-                    mic_locs = np.c_[
-                        [2.45, 2.8, 1.3], [2.45-d, 2.8, 1.3], [2.45-d, 2.8, 1.3-d], [2.45, 2.8, 1.3-d]
-                    ]
-                    # finally place the array in the room
-                    room.add_microphone_array(mic_locs)
-
-                    ###############################################################################################################
-                    # Run the simulations (this will also build the RIR automatically)
-                    ###############################################################################################################
-                    room.simulate()
-                    S = room.mic_array.signals
-                    signals = []
-                    for i in range(num_of_mics):
-                        s = S[i] / 100
-                        mic_signal = s
-
-                        if add_noise:
-                            # noise = pink_noise(len(s))
-                            noise = arm_noise(len(s))
-                            Es = sum(np.power(s[signal_range[0]:signal_range[1]], 2))
-                            En = sum(np.power(noise[signal_range[0]:signal_range[1]], 2))
-                            alpha = np.sqrt(Es/(10**(SNR/10)*En))
-                            mic_signal = s + alpha*noise
-
-                        signals.append(mic_signal)
-                    
                     if add_noise:
                         print("Noise added, Denoise: ", denoise)
+
+                    for k in range(num_of_mics):
+                        print(f"processing mic: {k}")
+                        ###############################################################################################################
+                        # Create the room
+                        ###############################################################################################################
+                        if args.method == "ism":
+                            room = pra.ShoeBox(
+                                room_dim, fs=fs, materials=pra.Material(e_absorption), max_order=max_order
+                            )
+                        elif args.method == "hybrid":
+                            room = pra.ShoeBox(
+                                room_dim,
+                                fs=fs,
+                                materials=pra.Material(e_absorption),
+                                max_order=3,
+                                ray_tracing=True,
+                                air_absorption=True,
+                            )
+                        elif args.method == "anechoic":
+                            room = pra.AnechoicRoom(3, fs=fs)
+
+                        # place the source in the room
+                        room.add_source([2.45, 2.3, 1.3], signal=audio)
+
+                        ###############################################################################################################
+                        # Add microphones
+                        ###############################################################################################################
+                        # define the locations of the microphones
+                        move = mic_array_movements[:,k]
+                        mic_locs = mic_array_initial_loc + move[:,np.newaxis]
+                        print(mic_locs)
+                        # finally place the array in the room
+                        room.add_microphone_array(mic_locs)
+
+                        ###############################################################################################################
+                        # Run the simulations (this will also build the RIR automatically)
+                        ###############################################################################################################
+                        room.simulate()
+                        S = room.mic_array.signals
+                        original_signals.append(S[k]/100)
+                        
+                        signals = []
+                        for i in range(num_of_mics):
+                            s = S[i] / 100
+                            mic_signal = s
+
+                            if add_noise:
+                                # noise = pink_noise(len(s))
+                                noise = arm_noise(len(s))
+                                Es = sum(np.power(s[signal_range[0]:signal_range[1]], 2))
+                                En = sum(np.power(noise[signal_range[0]:signal_range[1]], 2))
+                                alpha = np.sqrt(Es/(10**(SNR/10)*En))
+                                mic_signal = s + alpha*noise
+
+                            signals.append(mic_signal)
+                        
+                        ###############################################################################################################
+                        # Create microphone filtered signals
+                        ###############################################################################################################
+                        mic_signals = []
+                        
+                        for i in range(len(signals)):
+                            mic_signal = signal.sosfilt(ICS[i], signals[i])
+                            mic_signals.append(mic_signal)
+
+                        noisy_signals.append(mic_signals[k])
+
+                        if denoise:
+                            print("Denoising...")
+                            nsysignals = np.array(mic_signals).T
+                            noise = np.array(nsysignals[0:signal_range[0],:])
+                            denoise_signals = wiener_filter(nsysignals, noise, 32, 0.9975)
+                            mic_signals = [np.array(sig) for sig in list(denoise_signals.T)]
+                        
+                        denoised_signals.append(mic_signals[k])
+                        calib_signals.append(mic_signals[k][signal_range[0]:signal_range[1]])        
+
+                    # save calibration signals
+                    for i, y in enumerate(calib_signals):
+                        scipy.io.wavfile.write(f"simulation_calibrations/calibration_signal{i}_{SNR}_{rt60_tgt}.wav", fs, y)
+                    print("Microphone signal files written.")
+                    for i, y in enumerate(denoised_signals):
+                        scipy.io.wavfile.write(f"simulation_calibrations/noisy_signal{i}_{SNR}_{rt60_tgt}.wav", fs, y)
+                        
+                    if plot_figure:
+                            min_val = -80
+                            max_val = -30
+                            plt.figure()
+                            plt.subplot(3, 1, 1)
+                            plt.specgram(original_signals[0]/np.abs(original_signals[0]).max(), NFFT=256, Fs=fs, vmin=min_val, vmax=max_val)
+                            plt.title("Original Signal")
+                            plt.subplot(3, 1, 2)
+                            plt.specgram(noisy_signals[0]/ np.abs(original_signals[0]).max(), NFFT=256, Fs=fs, vmin=min_val, vmax=max_val)
+                            plt.title("Noisy Mic Signal")
+                            plt.subplot(3, 1, 3)
+                            plt.specgram(denoised_signals[0]/ np.abs(original_signals[0]).max(), NFFT=256, Fs=fs, vmin=min_val, vmax=max_val)
+                            plt.title("Denoise Mic Signal")
+
+
+                    # plot microphone signals
+                    if plot_figure:
+                        fig, axs = plt.subplots(len(mic_signals), sharex=True)
+                        for i, y in enumerate(mic_signals):
+                            x = np.linspace(0, len(mic_signals[i])/fs, len(mic_signals[i]))
+                            axs[i].plot(x, y)
+                            axs[i].set_xlim(0, len(mic_signals[i])/fs)
+                            axs[i].set_ylim(-0.05, 0.05)
+                            if i == len(mic_signals) - 1:
+                                axs[i].set_xlabel('Time [s]')
 
                     if args.method == "ism":
                         # measure the reverberation time
@@ -487,56 +573,7 @@ if __name__ == "__main__":
                             # fig, axes = room.plot_rir(select=select, kind="tf")  # transfer function
                             fig, axes = room.plot_rir(select=select, kind="spec")  # spectrograms
 
-                    if plot_figure:
-                        min_val = -80
-                        max_val = -30
-                        plt.figure()
-                        plt.subplot(3, 1, 1)
-                        plt.specgram(signals[0]/np.abs(signals[0]).max(), NFFT=256, Fs=fs, vmin=min_val, vmax=max_val)
-                        plt.title("Original Signal")
-                    
-                    ###############################################################################################################
-                    # Create microphone filtered signals
-                    ###############################################################################################################
-                    mic_signals = []
-                    calib_signals = []
-                    for i in range(len(signals)):
-                        mic_signal = signal.sosfilt(ICS[i], signals[i])
-                        mic_signals.append(mic_signal)
-
-                    if plot_figure:
-                        plt.subplot(3, 1, 2)
-                        plt.specgram(mic_signals[0]/ np.abs(signals[0]).max(), NFFT=256, Fs=fs, vmin=min_val, vmax=max_val)
-                        plt.title("Noisy Mic Signal")
-
-                    if denoise:
-                        noisy_signals = np.array(mic_signals).T
-                        noise = np.array(noisy_signals[0:signal_range[0],:])
-                        denoise_signals = wiener_filter(noisy_signals, noise, 32, 0.9975)
-                        mic_signals = [np.array(sig) for sig in list(denoise_signals.T)]
-                        
-                    calib_signals = [sig[signal_range[0]:signal_range[1]] for sig in mic_signals]
-
-                    if denoise and plot_figure:                     
-                        plt.subplot(3, 1, 3)
-                        plt.specgram(mic_signals[0]/ np.abs(signals[0]).max(), NFFT=256, Fs=fs, vmin=min_val, vmax=max_val)
-                        plt.title("Denoise Mic Signal")
-
-                    # plot microphone signals
-                    if plot_figure:
-                        fig, axs = plt.subplots(len(mic_signals), sharex=True)
-                        for i, y in enumerate(mic_signals):
-                            x = np.linspace(0, len(mic_signals[i])/fs, len(mic_signals[i]))
-                            axs[i].plot(x, y)
-                            axs[i].set_xlim(0, len(mic_signals[i])/fs)
-                            axs[i].set_ylim(-0.05, 0.05)
-                            if i == len(mic_signals) - 1:
-                                axs[i].set_xlabel('Time [s]')
-                    # plt.show()
-
-                    for i, y in enumerate(calib_signals):
-                        scipy.io.wavfile.write(f"simulation_calibrations/calibration_signal{i}_{SNR}_{rt60_tgt}.wav", fs, y)
-                    print("Microphone signal files written.")
+                   
 
                     ###############################################################################################################
                     # Calibration
