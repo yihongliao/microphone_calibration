@@ -15,12 +15,15 @@ from scipy.signal import tf2sos, stft
 from scipy.fft import ifft, fft, fftshift
 import scipy.io.wavfile
 import scipy.io
-import noisereduce as nr
+import sys
+sys.path.append(os.path.join(os.path.dirname(__file__), 'mynoisereduce'))
+import mynoisereduce as mnr
 import pyroomacoustics as pra
 from statistics import mean 
 import csv
 import os
 import time
+from wiener import wiener_filter
 
 methods = ["ism", "hybrid", "anechoic"]
 
@@ -66,6 +69,18 @@ def pink_noise(N):
         S = S / np.sqrt(np.mean(S**2))
         X_shaped = X_white * S
         return np.fft.irfft(X_shaped)
+
+def arm_noise(N):
+    fs, data_ = wavfile.read("../measurements/ambient_w_arm1.wav")
+    data = np.resize(data_[:, 0], N)
+
+    spectrum = np.abs(fft(data))
+
+    noise = np.random.normal(0, 1, len(spectrum))
+    noise_fft = fft(noise)
+    noise_fft_with_spectrum = noise_fft * np.sqrt(spectrum)
+    noise_with_spectrum = np.real(ifft(noise_fft_with_spectrum))
+    return noise_with_spectrum
 
 def calculate_evaluation_metrics(FRS):
     P = len(FRS)
@@ -162,6 +177,7 @@ def align_and_crop_signals(signals, target_length, threshold=0.003):
 
     reference_signal = signals[reference_index][:minimum_sig_length]
 
+    print("signal shift: ", end =" ")
     for i in range(num_signals):
         if i == reference_index:
             aligned_signals.append(reference_signal[starting_index:starting_index+target_length])
@@ -171,7 +187,7 @@ def align_and_crop_signals(signals, target_length, threshold=0.003):
 
         # Compute cross-correlation
         cross_corr, shift = gcc_phat(reference_signal, current_signal, max_tau=None, interp=1)
-        print(shift)
+        print(f"{i}={shift}", end =" ")
 
         # Zero-pad the current signal to align it with the reference signal
         aligned_signal = np.zeros_like(reference_signal)
@@ -179,13 +195,13 @@ def align_and_crop_signals(signals, target_length, threshold=0.003):
 
         # Crop the aligned signal to the target length
         aligned_signals.append(aligned_signal[starting_index:starting_index+target_length])
-
+    print("")
     aligned_signals = np.array(aligned_signals)
 
-    plt.figure(2)
-    for i in range(num_signals):
-        plt.plot(aligned_signals[i])
-    plt.show()
+    # plt.figure(2)
+    # for i in range(num_signals):
+    #     plt.plot(aligned_signals[i])
+    # plt.show()
 
     return aligned_signals
 
@@ -314,26 +330,27 @@ if __name__ == "__main__":
     trials = 1
     room_dim = [7.1, 6.0, 3.0]  # meters
     d = 0
-    signal_range = [fs*2, fs*12]
+    signal_range = [fs*10, fs*20]
 
     plot_figure = args.plot
     calibration = args.calibration
     evaluate = args.evaluate
     write_eval_result = args.write
     add_noise = True
-    denoise = False
-    n_std_thresh_stationary = 0.5
+    denoise = True
+    n_std_thresh_stationary = 0
 
     # import a mono wavfile as the source signal
     # the sampling frequency should match that of the room
     # fs, audio = wavfile.read("samples/guitar_16k.wav")
-    fs, audio = wavfile.read("../signal/white_noise_15s.wav")
-    audio = audio / np.iinfo(np.int16).max
+    fs, audio = wavfile.read("../signal/white_noise_w_blank.wav")
+    audio = audio[:fs*20] / np.iinfo(np.int16).max
+
+    path = f"simulation_calibrations/d_{d}"
+    if not os.path.exists(path):
+        os.mkdir(f"simulation_calibrations/d_{d}") 
 
     if write_eval_result:
-        path = f"simulation_calibrations/d_{d}"
-        if not os.path.exists(path):
-            os.mkdir(f"simulation_calibrations/d_{d}") 
         filename_A = f"simulation_calibrations/d_{d}/AlphaA.csv"
         filename_P = f"simulation_calibrations/d_{d}/AlphaP.csv"
         # Initialize the CSV file with placeholders
@@ -443,27 +460,18 @@ if __name__ == "__main__":
                         mic_signal = s
 
                         if add_noise:
-                            noise = pink_noise(len(s))
+                            # noise = pink_noise(len(s))
+                            noise = arm_noise(len(s))
                             Es = sum(np.power(s[signal_range[0]:signal_range[1]], 2))
                             En = sum(np.power(noise[signal_range[0]:signal_range[1]], 2))
                             alpha = np.sqrt(Es/(10**(SNR/10)*En))
                             mic_signal = s + alpha*noise
 
                         signals.append(mic_signal)
-
-                    min_val = -80
-                    max_val = -30
-                    plt.figure()
-                    plt.subplot(2, 1, 1)
-                    plt.specgram(s/ np.abs(mic_signal).max(), NFFT=256, Fs=fs, vmin=min_val, vmax=max_val)
-                    plt.title("Original Signal")
-                    plt.subplot(2, 1, 2)
-                    plt.specgram(mic_signal/ np.abs(mic_signal).max(), NFFT=256, Fs=fs, vmin=min_val, vmax=max_val)
-                    plt.title("Noisy Signal")
-
+                    
                     if add_noise:
                         print("Noise added, Denoise: ", denoise)
-                    
+
                     if args.method == "ism":
                         # measure the reverberation time
                         rt60 = room.measure_rt60()
@@ -478,26 +486,41 @@ if __name__ == "__main__":
                             fig, axes = room.plot_rir(select=select, kind="ir")  # impulse responses
                             # fig, axes = room.plot_rir(select=select, kind="tf")  # transfer function
                             fig, axes = room.plot_rir(select=select, kind="spec")  # spectrograms
-                        
+
+                    if plot_figure:
+                        min_val = -80
+                        max_val = -30
+                        plt.figure()
+                        plt.subplot(3, 1, 1)
+                        plt.specgram(signals[0]/np.abs(signals[0]).max(), NFFT=256, Fs=fs, vmin=min_val, vmax=max_val)
+                        plt.title("Original Signal")
+                    
                     ###############################################################################################################
                     # Create microphone filtered signals
                     ###############################################################################################################
                     mic_signals = []
+                    calib_signals = []
                     for i in range(len(signals)):
                         mic_signal = signal.sosfilt(ICS[i], signals[i])
-                        calibsig = mic_signal[signal_range[0]:signal_range[1]]
-                        if denoise:
-                            calibsig = nr.reduce_noise(y=calibsig, y_noise=mic_signal[0:signal_range[0]], stationary=True, sr=fs, n_std_thresh_stationary=n_std_thresh_stationary)
-                        mic_signals.append(calibsig)
+                        mic_signals.append(mic_signal)
 
                     if plot_figure:
-                        plt.figure()
-                        plt.subplot(2, 1, 1)
-                        plt.specgram(mic_signal/ np.abs(mic_signal).max(), NFFT=256, Fs=fs, vmin=min_val, vmax=max_val)
-                        plt.title("Noisy Signal")
-                        plt.subplot(2, 1, 2)
-                        plt.specgram(calibsig/ np.abs(mic_signal).max(), NFFT=256, Fs=fs, vmin=min_val, vmax=max_val)
-                        plt.title("Denoise Signal")
+                        plt.subplot(3, 1, 2)
+                        plt.specgram(mic_signals[0]/ np.abs(signals[0]).max(), NFFT=256, Fs=fs, vmin=min_val, vmax=max_val)
+                        plt.title("Noisy Mic Signal")
+
+                    if denoise:
+                        noisy_signals = np.array(mic_signals).T
+                        noise = np.array(noisy_signals[0:signal_range[0],:])
+                        denoise_signals = wiener_filter(noisy_signals, noise, 32, 0.9975)
+                        mic_signals = [np.array(sig) for sig in list(denoise_signals.T)]
+                        
+                    calib_signals = [sig[signal_range[0]:signal_range[1]] for sig in mic_signals]
+
+                    if denoise and plot_figure:                     
+                        plt.subplot(3, 1, 3)
+                        plt.specgram(mic_signals[0]/ np.abs(signals[0]).max(), NFFT=256, Fs=fs, vmin=min_val, vmax=max_val)
+                        plt.title("Denoise Mic Signal")
 
                     # plot microphone signals
                     if plot_figure:
@@ -511,7 +534,7 @@ if __name__ == "__main__":
                                 axs[i].set_xlabel('Time [s]')
                     # plt.show()
 
-                    for i, y in enumerate(mic_signals):
+                    for i, y in enumerate(calib_signals):
                         scipy.io.wavfile.write(f"simulation_calibrations/calibration_signal{i}_{SNR}_{rt60_tgt}.wav", fs, y)
                     print("Microphone signal files written.")
 
@@ -530,16 +553,16 @@ if __name__ == "__main__":
                     channels_to_extract = []
                     fs, signals = extract_measurements(wav_directory, file_names, channels_to_extract)
 
-                    # # align and crop calibration signals
-                    # # Set a threshold for signal starting point
-                    # threshold = 0.1
-                    # # Set the target length for cropping
-                    # target_length = round(fs * 10)
-                    # # Align and crop signals
-                    # aligned_and_cropped_signals = align_and_crop_signals(signals, target_length, threshold=threshold)
+                    # align and crop calibration signals
+                    # Set a threshold for signal starting point
+                    threshold = 0.1
+                    # Set the target length for cropping
+                    target_length = round(fs * 10)
+                    # Align and crop signals
+                    aligned_and_cropped_signals = align_and_crop_signals(signals, target_length, threshold=threshold)
                     
                     # If already knew the delay
-                    aligned_and_cropped_signals = np.array([signal for signal in signals])
+                    # aligned_and_cropped_signals = np.array([signal for signal in signals])
 
                     # perform AFRC
                     g, G = AFRC(aligned_and_cropped_signals, K)

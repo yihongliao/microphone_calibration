@@ -2,7 +2,8 @@ from mynoisereduce.spectralgate.base import SpectralGate
 import numpy as np
 from librosa import stft, istft
 from scipy.signal import fftconvolve
-from .utils import _amp_to_db
+from .utils import _amp_to_db, _db_to_amp
+import matplotlib.pyplot as plt
 
 
 class SpectralGateStationary(SpectralGate):
@@ -95,26 +96,48 @@ class SpectralGateStationary(SpectralGate):
             # spectrogram of signal in dB
             sig_stft_db = _amp_to_db(np.abs(sig_stft))
 
-            # calculate the threshold for each frequency/time bin
-            db_thresh = np.repeat(
-                np.reshape(self.noise_thresh, [1, len(self.mean_freq_noise)]),
+            # # calculate the threshold for each frequency/time bin
+            # db_thresh = np.repeat(
+            #     np.reshape(self.noise_thresh, [1, len(self.mean_freq_noise)]),
+            #     np.shape(sig_stft_db)[1],
+            #     axis=0,
+            # ).T
+
+            # # mask if the signal is above the threshold
+            # sig_mask = sig_stft_db > db_thresh
+
+            # sig_mask = sig_mask * self._prop_decrease + np.ones(np.shape(sig_mask)) * (
+            #     1.0 - self._prop_decrease
+            # )
+
+            # if self.smooth_mask:
+            #     # convolve the mask with a smoothing filter
+            #     sig_mask = fftconvolve(sig_mask, self._smoothing_filter, mode="same")
+
+            # # multiply signal with mask
+            # sig_stft_denoised = sig_stft * sig_mask
+
+            amp_thresh = _db_to_amp(self.noise_thresh)
+            thresh = np.repeat(
+                np.reshape(amp_thresh, [1, len(self.mean_freq_noise)]),
                 np.shape(sig_stft_db)[1],
                 axis=0,
             ).T
 
-            # mask if the signal is above the threshold
-            sig_mask = sig_stft_db > db_thresh
+            abs_sig_stft = np.abs(sig_stft)
+            angle_sig_stft = np.angle(sig_stft)
 
-            sig_mask = sig_mask * self._prop_decrease + np.ones(np.shape(sig_mask)) * (
-                1.0 - self._prop_decrease
-            )
+            # if self.smooth_mask:
+            #     # convolve the mask with a smoothing filter
+            #     thresh = fftconvolve(thresh, self._smoothing_filter, mode="same")
 
-            if self.smooth_mask:
-                # convolve the mask with a smoothing filter
-                sig_mask = fftconvolve(sig_mask, self._smoothing_filter, mode="same")
+            # print(self._smoothing_filter.shape)
+            # print(self._smoothing_filter)
 
-            # multiply signal with mask
-            sig_stft_denoised = sig_stft * sig_mask
+            abs_sig_stft_denoised = np.subtract(abs_sig_stft, thresh)
+            abs_sig_stft_denoised = abs_sig_stft_denoised.clip(min=0)
+
+            sig_stft_denoised = abs_sig_stft_denoised * np.exp(1j*angle_sig_stft)
 
             # invert/recover the signal
             denoised_signal = istft(
