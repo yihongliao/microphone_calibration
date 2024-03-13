@@ -24,6 +24,7 @@ import csv
 import os
 import time
 from wiener import wiener_filter
+from noise_reduction import noise_reduction
 
 methods = ["ism", "hybrid", "anechoic"]
 
@@ -338,7 +339,7 @@ if __name__ == "__main__":
     num_of_mics = 4
 
     # The desired reverberation time and dimensions of the room
-    SNRs = [25.0, 35.0]  # signal-to-noise ratio in dB
+    SNRs = [15.0, 25.0, 35.0]  # signal-to-noise ratio in dB
     rt60_tgts = [0.2, 0.3, 0.4, 0.5, 0.6]  # seconds
     trials = 1
     room_dim = [7.1, 6.0, 3.0]  # meters
@@ -350,7 +351,7 @@ if __name__ == "__main__":
     calibration = args.calibration
     evaluate = args.evaluate
     write_eval_result = args.write
-    add_noise = True
+    add_noise = False
     denoise = False
     n_std_thresh_stationary = 0
 
@@ -478,7 +479,7 @@ if __name__ == "__main__":
                         # define the locations of the microphones
                         move = mic_array_movements[:,k]
                         mic_locs = mic_array_initial_loc + move[:,np.newaxis]
-                        print(mic_locs)
+                        # print(mic_locs)
                         # finally place the array in the room
                         room.add_microphone_array(mic_locs)
 
@@ -517,11 +518,8 @@ if __name__ == "__main__":
 
                         if denoise:
                             print("Denoising...")
-                            nsysignals = np.array(mic_signals).T
-                            noise = np.array(nsysignals[0:signal_range[0],:])
-                            denoise_signals = wiener_filter(nsysignals, noise, 32, 0.9975)
-                            mic_signals = [np.array(sig) for sig in list(denoise_signals.T)]
-                        
+                            mic_signals = noise_reduction(mic_signals, signal_range)
+                    
                         denoised_signals.append(mic_signals[k])
                         calib_signals.append(mic_signals[k][signal_range[0]:signal_range[1]])        
 
