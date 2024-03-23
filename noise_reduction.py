@@ -1,19 +1,31 @@
-from wiener import wiener_filter
-import mynoisereduce as mnr
 import numpy as np
-import matplotlib.pyplot as plt
+from wiener import wiener_filter
+
+def subtract_noise_from_signal(signal, noise):
+
+    while len(noise) < len(signal):
+        noise = np.concatenate((noise, noise[:len(signal) - len(noise)]))
+        
+    # Calculate FFT of the signal and noise
+    signal_fft = np.fft.fft(signal)
+    noise_fft = np.fft.fft(noise[:len(signal)])  # Ensure noise has the same length as signal
+    
+    # Calculate the amplitude spectrum of signal and noise
+    signal_amplitude = np.abs(signal_fft)
+    noise_amplitude = np.abs(noise_fft)
+    
+    # Subtract noise amplitude from signal amplitude
+    denoised_amplitude = np.maximum(signal_amplitude - noise_amplitude, 0)  # Ensure no negative amplitudes
+    
+    # Reconstruct the denoised signal with the modified amplitude
+    denoised_fft = signal_fft * (denoised_amplitude / (signal_amplitude + 1e-10))  # Add a small constant to avoid division by zero
+    denoised_signal = np.fft.ifft(denoised_fft)
+    
+    return denoised_signal.real  # Take the real part to remove negligible imaginary part
+
 
 def noise_reduction(mic_signals, signal_range):
     noisy_signals = mic_signals.copy()
-
-    # spectral subtraction
-    # for i, noisy_signal in enumerate(noisy_signals):
-    #     noise = noisy_signal[0:signal_range[0]]
-    #     noisy_signals[i] = mnr.reduce_noise(y=noisy_signal, y_noise=noise, stationary=True, sr=44100, freq_mask_smooth_hz=100, n_std_thresh_stationary=-0.5)
-    
-    # Wiener filter
-    nsysignals = np.array(noisy_signals).T
-    denoise_signals = wiener_filter(nsysignals, signal_range, 32, 1)
-    denoised_signals = [np.array(sig) for sig in list(denoise_signals.T)]
+    denoised_signals = wiener_filter(noisy_signals, signal_range, False, 32, 1)  
 
     return denoised_signals

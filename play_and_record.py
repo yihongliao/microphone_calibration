@@ -27,11 +27,11 @@ def play_and_record(wav_file, input_device_id, output_device_id, output_file):
 
 if __name__ == "__main__":
     list_output_devices()
-    wav_file_path = '../signal/white_noise_15s.wav'
+    wav_file_path = '../signal/white_noise_w_blank.wav'
     input_device_id = 2
     output_device_id = 4 
 
     # output_file = f'record_pos{1}.wav'
-    output_file = '../measurements/white_test2.wav'
+    output_file = '../measurements/test.wav'
 
     play_and_record(wav_file_path, input_device_id, output_device_id, output_file)

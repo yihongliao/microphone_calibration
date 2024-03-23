@@ -25,6 +25,7 @@ import os
 import time
 from wiener import wiener_filter
 from noise_reduction import noise_reduction
+from remove_spikes import remove_spikes
 
 methods = ["ism", "hybrid", "anechoic"]
 
@@ -73,15 +74,17 @@ def pink_noise(N):
 
 def arm_noise(N):
     fs, data_ = wavfile.read("../measurements/ambient_w_arm1.wav")
-    data = np.resize(data_[:, 0], N)
+    # data = np.resize(data_[:, 0], N)
+    data = data_[:, 0]
+    data = np.pad(data, (0, N-len(data)))
 
     spectrum = np.abs(fft(data))
 
     noise = np.random.normal(0, 1, len(spectrum))
     noise_fft = fft(noise)
-    noise_fft_with_spectrum = noise_fft * np.sqrt(spectrum)
-    noise_with_spectrum = np.real(ifft(noise_fft_with_spectrum))
-    return noise_with_spectrum
+    noise_fft_with_amplitude_spectrum = noise_fft * spectrum / np.abs(noise_fft)
+    noise_with_amplitude_spectrum = np.real(np.fft.ifft(noise_fft_with_amplitude_spectrum))
+    return noise_with_amplitude_spectrum
 
 def calculate_evaluation_metrics(FRS):
     P = len(FRS)
@@ -118,7 +121,7 @@ def extract_measurements(wav_directory, file_names, channels_to_extract):
         else :
             channel_data_ = signal
 
-        if isinstance(channel_data_[0], int):
+        if isinstance(channel_data_[0], int) or isinstance(channel_data_[0], np.int16):
             # Scale signal to -1 ~ 1
             channel_data = (channel_data_) / np.iinfo(np.int16).max
         else:
@@ -218,13 +221,13 @@ def fast_vec_mul(A, B):
 def fast_elem_mul(A, B):
     return np.einsum('ij,ij->ij', A, B)
 
-def AFRC(y, K=1024):
+def AFRC(y, K=1024, remove_spike=True):
     time_start = time.time()
     print('AFRC start, sample size: ', np.shape(y)[1])
     # Parameters
     # K = 1024 # number of frequency bins
     I = np.shape(y)[0] # number of microphones
-    u = 0.5 # step size
+    u = 1.0 # step size
 
     N = K # number of sample points in a frame
     O = int(N/2) # overlap length
@@ -234,6 +237,15 @@ def AFRC(y, K=1024):
     G = np.ones((I,K),dtype=np.cdouble)
     G = G/np.sqrt(K)
 
+    # calculate stft of signal
+    f, t, Ystft = stft(y, fs=fs, nperseg=N, window=np.ones(N), axis=1, return_onesided=False)
+    Ystft = Ystft * K
+
+    # remove noise spike
+    if remove_spike:
+        Ystft = remove_spikes(Ystft, 0.4, 1, 1024)
+        print("noise spike removed")
+
     J_iter = []
     C_iter = []
     T_iter = []
@@ -242,11 +254,9 @@ def AFRC(y, K=1024):
         J = []
         C = []
         T = []
-        while (N-O)*(m-1)+N < np.shape(y)[1]:
+        for m in range(Ystft.shape[2]):
             # AFRC Algorithm
-            frame_start = (N-O)*(m-1)
-            frame_end = (N-O)*(m-1)+N
-            Y = fft(y[:,frame_start:frame_end],axis=1)
+            Y = Ystft[:, :, m]
             Zm = fast_elem_mul(Y, G)
             
             J.append(0)
@@ -351,8 +361,9 @@ if __name__ == "__main__":
     calibration = args.calibration
     evaluate = args.evaluate
     write_eval_result = args.write
-    add_noise = False
-    denoise = False
+    add_noise = True
+    denoise = True
+    remove_spike = True
     n_std_thresh_stationary = 0
 
     # import a mono wavfile as the source signal
@@ -433,9 +444,8 @@ if __name__ == "__main__":
                 if calibration:
                     print("d: ", d, " SNR: ", SNR, " RT60: ", rt60_tgt, " Trial: ", k)
 
-                    original_signals = []
-                    noisy_signals = []
-                    denoised_signals = []
+                    clean_signals = []
+                    array_signals = []
                     calib_signals = []
                     
                     # We invert Sabine's formula to obtain the parameters for the ISM simulator
@@ -488,72 +498,69 @@ if __name__ == "__main__":
                         ###############################################################################################################
                         room.simulate()
                         S = room.mic_array.signals
-                        original_signals.append(S[k]/100)
-                        
+                        clean_signals.append(S/100)
+
                         signals = []
+                        noise = arm_noise(len(S[0]))
                         for i in range(num_of_mics):
-                            s = S[i] / 100
+                            s = S[i,:] / 100
                             mic_signal = s
 
                             if add_noise:
                                 # noise = pink_noise(len(s))
-                                noise = arm_noise(len(s))
+                                # noise = arm_noise(len(s))
                                 Es = sum(np.power(s[signal_range[0]:signal_range[1]], 2))
                                 En = sum(np.power(noise[signal_range[0]:signal_range[1]], 2))
                                 alpha = np.sqrt(Es/(10**(SNR/10)*En))
                                 mic_signal = s + alpha*noise
-
+                            
                             signals.append(mic_signal)
                         
                         ###############################################################################################################
                         # Create microphone filtered signals
                         ###############################################################################################################
-                        mic_signals = []
-                        
+                        mic_signals = []                       
                         for i in range(len(signals)):
                             mic_signal = signal.sosfilt(ICS[i], signals[i])
                             mic_signals.append(mic_signal)
 
-                        noisy_signals.append(mic_signals[k])
-
-                        if denoise:
-                            print("Denoising...")
-                            mic_signals = noise_reduction(mic_signals, signal_range)
-                    
-                        denoised_signals.append(mic_signals[k])
-                        calib_signals.append(mic_signals[k][signal_range[0]:signal_range[1]])        
+                        array_signals.append(mic_signals)  
+            
+                    if denoise:
+                        noise_w_calib_signals = [sigs[pos] for pos, sigs in enumerate(array_signals)]
+                        calib_signals = noise_reduction(noise_w_calib_signals, signal_range)
+                    else:
+                        calib_signals = [sigs[pos][signal_range[0]:signal_range[1]] for pos, sigs in enumerate(array_signals)]
 
                     # save calibration signals
                     for i, y in enumerate(calib_signals):
-                        scipy.io.wavfile.write(f"simulation_calibrations/calibration_signal{i}_{SNR}_{rt60_tgt}.wav", fs, y)
+                        scipy.io.wavfile.write(f"simulation_calibrations/calibration_signal{i}_{SNR}_{rt60_tgt}.wav", fs, y)                                 
                     print("Microphone signal files written.")
-                    for i, y in enumerate(denoised_signals):
-                        scipy.io.wavfile.write(f"simulation_calibrations/noisy_signal{i}_{SNR}_{rt60_tgt}.wav", fs, y)
                         
                     if plot_figure:
-                            min_val = -80
-                            max_val = -30
+                            min_val = -140
+                            max_val = -70
                             plt.figure()
                             plt.subplot(3, 1, 1)
-                            plt.specgram(original_signals[0]/np.abs(original_signals[0]).max(), NFFT=256, Fs=fs, vmin=min_val, vmax=max_val)
+                            plt.specgram(clean_signals[0][0], NFFT=1024, noverlap=512, Fs=fs, vmin=min_val, vmax=max_val)
                             plt.title("Original Signal")
                             plt.subplot(3, 1, 2)
-                            plt.specgram(noisy_signals[0]/ np.abs(original_signals[0]).max(), NFFT=256, Fs=fs, vmin=min_val, vmax=max_val)
+                            plt.specgram(array_signals[0][0], NFFT=1024, noverlap=512, Fs=fs, vmin=min_val, vmax=max_val)
                             plt.title("Noisy Mic Signal")
                             plt.subplot(3, 1, 3)
-                            plt.specgram(denoised_signals[0]/ np.abs(original_signals[0]).max(), NFFT=256, Fs=fs, vmin=min_val, vmax=max_val)
+                            plt.specgram(calib_signals[0], NFFT=1024, noverlap=512, Fs=fs, vmin=min_val, vmax=max_val)
                             plt.title("Denoise Mic Signal")
 
 
                     # plot microphone signals
                     if plot_figure:
-                        fig, axs = plt.subplots(len(mic_signals), sharex=True)
-                        for i, y in enumerate(mic_signals):
-                            x = np.linspace(0, len(mic_signals[i])/fs, len(mic_signals[i]))
+                        fig, axs = plt.subplots(len(calib_signals), sharex=True)
+                        for i, y in enumerate(calib_signals):
+                            x = np.linspace(0, len(calib_signals[i])/fs, len(calib_signals[i]))
                             axs[i].plot(x, y)
-                            axs[i].set_xlim(0, len(mic_signals[i])/fs)
+                            axs[i].set_xlim(0, len(calib_signals[i])/fs)
                             axs[i].set_ylim(-0.05, 0.05)
-                            if i == len(mic_signals) - 1:
+                            if i == len(calib_signals) - 1:
                                 axs[i].set_xlabel('Time [s]')
 
                     if args.method == "ism":
@@ -600,7 +607,7 @@ if __name__ == "__main__":
                     # aligned_and_cropped_signals = np.array([signal for signal in signals])
 
                     # perform AFRC
-                    g, G = AFRC(aligned_and_cropped_signals, K)
+                    g, G = AFRC(aligned_and_cropped_signals, K, remove_spike)
 
                     # np.savetxt(f"simulation_calibrations/G_{SNR}_{rt60_tgt}.txt", g)
                     np.savetxt(f"simulation_calibrations/d_{d}/G_{SNR}_{rt60_tgt}_{k}.txt", G.view(float))
