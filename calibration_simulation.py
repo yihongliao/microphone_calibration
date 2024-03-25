@@ -23,7 +23,7 @@ from statistics import mean
 import csv
 import os
 import time
-from wiener import wiener_filter
+from wiener2 import wiener_filter
 from noise_reduction import noise_reduction
 from remove_spikes import remove_spikes
 
@@ -243,7 +243,7 @@ def AFRC(y, K=1024, remove_spike=True):
 
     # remove noise spike
     if remove_spike:
-        Ystft = remove_spikes(Ystft, 0.4, 1, 1024)
+        Ystft = remove_spikes(Ystft, 0.4, 1, K)
         print("noise spike removed")
 
     J_iter = []
@@ -363,7 +363,7 @@ if __name__ == "__main__":
     write_eval_result = args.write
     add_noise = True
     denoise = True
-    remove_spike = True
+    remove_spike = False
     n_std_thresh_stationary = 0
 
     # import a mono wavfile as the source signal
@@ -446,6 +446,7 @@ if __name__ == "__main__":
 
                     clean_signals = []
                     array_signals = []
+                    denoised_signals = []
                     calib_signals = []
                     
                     # We invert Sabine's formula to obtain the parameters for the ISM simulator
@@ -515,7 +516,7 @@ if __name__ == "__main__":
                                 mic_signal = s + alpha*noise
                             
                             signals.append(mic_signal)
-                        
+
                         ###############################################################################################################
                         # Create microphone filtered signals
                         ###############################################################################################################
@@ -525,14 +526,35 @@ if __name__ == "__main__":
                             mic_signals.append(mic_signal)
 
                         array_signals.append(mic_signals)  
+
+                    # for i, y in enumerate(array_signals):
+                    #     scipy.io.wavfile.write(f"simulation_calibrations/noisy_signal{i}_{SNR}_{rt60_tgt}.wav", fs, y[0])                                 
+                    # print("Microphone signal files written.")
+                    # time.sleep(3)
             
                     if denoise:
+                        print("denoising...")
+                        # for pos, sigs in enumerate(array_signals):
+                            
+                        #     for i, y in enumerate(sigs):
+                        #         scipy.io.wavfile.write(f"simulation_calibrations/noisy_signal{i}_{SNR}_{rt60_tgt}.wav", fs, y)   
+                        #     # print("Microphone signal files written.")
+                        # #     # time.sleep(3)
+
+                        #     pos_denoised = noise_reduction(sigs, signal_range)
+                        #     denoised_signals.append(pos_denoised[pos])
+
                         noise_w_calib_signals = [sigs[pos] for pos, sigs in enumerate(array_signals)]
-                        calib_signals = noise_reduction(noise_w_calib_signals, signal_range)
+                        for i, y in enumerate(noise_w_calib_signals):
+                            scipy.io.wavfile.write(f"simulation_calibrations/noisy_signal{i}_{SNR}_{rt60_tgt}.wav", fs, y)             
+                        denoised_signals = noise_reduction(noise_w_calib_signals, signal_range)
+                        # calib_signals = denoised_signals
+                        # denoised_signals = noise_w_calib_signals
+                        calib_signals = [sig[signal_range[0]:signal_range[1]] for sig in denoised_signals]
                     else:
                         calib_signals = [sigs[pos][signal_range[0]:signal_range[1]] for pos, sigs in enumerate(array_signals)]
 
-                    # save calibration signals
+                    # save calibration signals             
                     for i, y in enumerate(calib_signals):
                         scipy.io.wavfile.write(f"simulation_calibrations/calibration_signal{i}_{SNR}_{rt60_tgt}.wav", fs, y)                                 
                     print("Microphone signal files written.")
@@ -547,9 +569,10 @@ if __name__ == "__main__":
                             plt.subplot(3, 1, 2)
                             plt.specgram(array_signals[0][0], NFFT=1024, noverlap=512, Fs=fs, vmin=min_val, vmax=max_val)
                             plt.title("Noisy Mic Signal")
-                            plt.subplot(3, 1, 3)
-                            plt.specgram(calib_signals[0], NFFT=1024, noverlap=512, Fs=fs, vmin=min_val, vmax=max_val)
-                            plt.title("Denoise Mic Signal")
+                            if denoise:
+                                plt.subplot(3, 1, 3)
+                                plt.specgram(denoised_signals[0], NFFT=1024, noverlap=512, Fs=fs, vmin=min_val, vmax=max_val)
+                                plt.title("Denoise Mic Signal")
 
 
                     # plot microphone signals

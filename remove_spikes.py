@@ -47,7 +47,7 @@ def find_spikes(YSEG, threshold=0.1, spike_size=3, K=1024):
 
     for i in range(num_of_mics - 1):
         for j in range(i + 1, num_of_mics):
-            YnabsGRAD = np.gradient(np.abs(YSEG[i, :, :]) / np.abs(YSEG[j, :, :]), axis=1)
+            YnabsGRAD = np.gradient(np.abs(YSEG[i, :, :]) / (np.abs(YSEG[j, :, :] + 0.000000001)), axis=1)
             YnphGRAD = np.gradient(np.angle(np.exp(1j * (np.angle(YSEG[i, :, :]) - np.angle(YSEG[j, :, :])))), axis=1)
             absGRAD_mean += np.mean(np.abs(YnabsGRAD), axis=1, keepdims=True)
             phGRAD_mean += np.mean(np.abs(YnphGRAD), axis=1, keepdims=True)

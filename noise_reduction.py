@@ -1,5 +1,5 @@
 import numpy as np
-from wiener import wiener_filter
+from wiener2 import wiener_filter
 
 def subtract_noise_from_signal(signal, noise):
 
@@ -26,6 +26,7 @@ def subtract_noise_from_signal(signal, noise):
 
 def noise_reduction(mic_signals, signal_range):
     noisy_signals = mic_signals.copy()
-    denoised_signals = wiener_filter(noisy_signals, signal_range, False, 32, 1)  
+    # denoised_signals = wiener_filter(noisy_signals, signal_range, False, 64, 1)  
+    denoised_signals = wiener_filter(noisy_signals, signal_range, 15, "full")  
 
     return denoised_signals
