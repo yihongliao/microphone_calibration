@@ -25,7 +25,8 @@ import os
 import time
 from wiener2 import wiener_filter
 from noise_reduction import noise_reduction
-from remove_spikes import remove_spikes
+from remove_spikes import remove_spikes, remove_spikes2
+import random
 
 methods = ["ism", "hybrid", "anechoic"]
 
@@ -227,7 +228,7 @@ def AFRC(y, K=1024, remove_spike=True):
     # Parameters
     # K = 1024 # number of frequency bins
     I = np.shape(y)[0] # number of microphones
-    u = 1.0 # step size
+    u = 0.5 # step size
 
     N = K # number of sample points in a frame
     O = int(N/2) # overlap length
@@ -235,16 +236,10 @@ def AFRC(y, K=1024, remove_spike=True):
 
     # initialize
     G = np.ones((I,K),dtype=np.cdouble)
-    G = G/np.sqrt(K)
 
     # calculate stft of signal
     f, t, Ystft = stft(y, fs=fs, nperseg=N, window=np.ones(N), axis=1, return_onesided=False)
     Ystft = Ystft * K
-
-    # remove noise spike
-    if remove_spike:
-        Ystft = remove_spikes(Ystft, 0.4, 1, K)
-        print("noise spike removed")
 
     J_iter = []
     C_iter = []
@@ -273,7 +268,7 @@ def AFRC(y, K=1024, remove_spike=True):
                 dJm_dGiH = fast_mul_sum(Dijm, diag_YiHm)
 
                 # Eq 24
-                dC_dGiH = 2*(0.0000001 + fast_vec_mul(G[i,:],G[i,:].conj().T)-1)*G[i,:]
+                dC_dGiH = 2*(fast_vec_mul(G[i,:],G[i,:].conj().T)-1)*G[i,:]
 
                 # Eq 31
                 lm = np.absolute(fast_vec_mul(dC_dGiH,dJm_dGiH.conj().T)/fast_vec_mul(dC_dGiH,dC_dGiH.conj().T))
@@ -298,8 +293,12 @@ def AFRC(y, K=1024, remove_spike=True):
         C_iter.append(sum(C))
         T_iter.append(sum(T))
         print(f'iter: {iter} J:{J_iter[-1]} C:{C_iter[-1]} T: {T_iter[-1]}')
-        
-    G = G*np.sqrt(K)
+
+     # remove noise spike
+    if remove_spike:
+        G = remove_spikes2(Ystft, G, 7, 0.1, 1, K)
+        print("noise spike removed")
+
     g = np.real(ifft(G,axis=1)) # transform the filter back to time domain
     # g[int(K*0.9):,:] = 0
     time_end = time.time()
@@ -307,16 +306,20 @@ def AFRC(y, K=1024, remove_spike=True):
 
     return g, G
 
-def generate_mic_array_movements(rows, cols, d):
+def generate_mic_array_movements(rows, cols, d, p):
     coordinates = []
 
     for i in range(rows):
         if i % 2 == 0:
             for j in range(cols):
-                coordinates.append((i*d, 0, j*d))
+                ri = random.uniform(-1, 1) * p
+                rj = random.uniform(-1, 1) * p
+                coordinates.append((i*d+ri, 0, j*d+rj))
         else:
             for j in range(cols - 1, -1, -1):
-                coordinates.append((i*d, 0, j*d))
+                ri = random.uniform(-1, 1) * p
+                rj = random.uniform(-1, 1) * p
+                coordinates.append((i*d+ri, 0, j*d+rj))
 
     return np.array(coordinates).T
 
@@ -350,11 +353,11 @@ if __name__ == "__main__":
 
     # The desired reverberation time and dimensions of the room
     SNRs = [15.0, 25.0, 35.0]  # signal-to-noise ratio in dB
-    rt60_tgts = [0.2, 0.3, 0.4, 0.5, 0.6]  # seconds
+    rt60_tgts = [0.2, 0.5, 0.6]  # seconds
     trials = 1
     room_dim = [7.1, 6.0, 3.0]  # meters
     d = 0.126
-    precision = 0
+    precision = 0.000
     signal_range = [fs*10, fs*20]
 
     plot_figure = args.plot
@@ -363,22 +366,22 @@ if __name__ == "__main__":
     write_eval_result = args.write
     add_noise = True
     denoise = True
-    remove_spike = False
+    remove_spike = True
     n_std_thresh_stationary = 0
 
     # import a mono wavfile as the source signal
     # the sampling frequency should match that of the room
     # fs, audio = wavfile.read("samples/guitar_16k.wav")
     fs, audio = wavfile.read("../signal/white_noise_w_blank.wav")
-    audio = audio[:fs*20] / np.iinfo(np.int16).max
+    audio = audio / np.iinfo(np.int16).max
 
-    path = f"simulation_calibrations/d_{d}"
+    path = f"simulation_calibrations/p_{precision}"
     if not os.path.exists(path):
-        os.mkdir(f"simulation_calibrations/d_{d}") 
+        os.mkdir(f"simulation_calibrations/p_{precision}") 
 
     if write_eval_result:
-        filename_A = f"simulation_calibrations/d_{d}/AlphaA.csv"
-        filename_P = f"simulation_calibrations/d_{d}/AlphaP.csv"
+        filename_A = f"simulation_calibrations/p_{precision}/AlphaA.csv"
+        filename_P = f"simulation_calibrations/p_{precision}/AlphaP.csv"
         # Initialize the CSV file with placeholders
         initialize_csv(filename_A, SNRs, rt60_tgts)
         initialize_csv(filename_P, SNRs, rt60_tgts)
@@ -440,9 +443,9 @@ if __name__ == "__main__":
         for rt60_tgt in rt60_tgts:
             alphaAs = []
             alphaPs = []
-            for k in range(trials):
+            for T in range(trials):
                 if calibration:
-                    print("d: ", d, " SNR: ", SNR, " RT60: ", rt60_tgt, " Trial: ", k)
+                    print("p: ", precision, " SNR: ", SNR, " RT60: ", rt60_tgt, " Trial: ", T)
 
                     clean_signals = []
                     array_signals = []
@@ -452,7 +455,8 @@ if __name__ == "__main__":
                     # We invert Sabine's formula to obtain the parameters for the ISM simulator
                     e_absorption, max_order = pra.inverse_sabine(rt60_tgt, room_dim)
 
-                    mic_array_movements = generate_mic_array_movements(2, 2, d)
+                    mic_array_movements = generate_mic_array_movements(2, 2, d, precision)
+                    print(mic_array_movements)
                     mic_array_initial_loc = np.c_[
                             [2.45, 2.8, 1.3], [2.45, 2.8, 1.3-d], [2.45-d, 2.8, 1.3-d], [2.45-d, 2.8, 1.3]
                         ]
@@ -534,23 +538,22 @@ if __name__ == "__main__":
             
                     if denoise:
                         print("denoising...")
-                        # for pos, sigs in enumerate(array_signals):
-                            
-                        #     for i, y in enumerate(sigs):
-                        #         scipy.io.wavfile.write(f"simulation_calibrations/noisy_signal{i}_{SNR}_{rt60_tgt}.wav", fs, y)   
-                        #     # print("Microphone signal files written.")
-                        # #     # time.sleep(3)
-
-                        #     pos_denoised = noise_reduction(sigs, signal_range)
-                        #     denoised_signals.append(pos_denoised[pos])
-
+                        ##################
                         noise_w_calib_signals = [sigs[pos] for pos, sigs in enumerate(array_signals)]
                         for i, y in enumerate(noise_w_calib_signals):
                             scipy.io.wavfile.write(f"simulation_calibrations/noisy_signal{i}_{SNR}_{rt60_tgt}.wav", fs, y)             
                         denoised_signals = noise_reduction(noise_w_calib_signals, signal_range)
-                        # calib_signals = denoised_signals
-                        # denoised_signals = noise_w_calib_signals
                         calib_signals = [sig[signal_range[0]:signal_range[1]] for sig in denoised_signals]
+
+                        ######################
+                        # for mic in range(num_of_mics):
+                        #     micsigs = []
+                        #     for pos, sigs in enumerate(array_signals):
+                        #         micsigs.append(sigs[mic])
+                        #     mic_denoised = noise_reduction(micsigs, signal_range)
+                        #     denoised_signals.append(mic_denoised[mic])
+                        # calib_signals = [sig[signal_range[0]:signal_range[1]] for sig in denoised_signals]
+
                     else:
                         calib_signals = [sigs[pos][signal_range[0]:signal_range[1]] for pos, sigs in enumerate(array_signals)]
 
@@ -560,19 +563,19 @@ if __name__ == "__main__":
                     print("Microphone signal files written.")
                         
                     if plot_figure:
-                            min_val = -140
-                            max_val = -70
-                            plt.figure()
-                            plt.subplot(3, 1, 1)
-                            plt.specgram(clean_signals[0][0], NFFT=1024, noverlap=512, Fs=fs, vmin=min_val, vmax=max_val)
-                            plt.title("Original Signal")
-                            plt.subplot(3, 1, 2)
-                            plt.specgram(array_signals[0][0], NFFT=1024, noverlap=512, Fs=fs, vmin=min_val, vmax=max_val)
-                            plt.title("Noisy Mic Signal")
-                            if denoise:
-                                plt.subplot(3, 1, 3)
-                                plt.specgram(denoised_signals[0], NFFT=1024, noverlap=512, Fs=fs, vmin=min_val, vmax=max_val)
-                                plt.title("Denoise Mic Signal")
+                        min_val = -140
+                        max_val = -70
+                        plt.figure()
+                        plt.subplot(3, 1, 1)
+                        plt.specgram(clean_signals[0][0], NFFT=1024, noverlap=512, Fs=fs, vmin=min_val, vmax=max_val)
+                        plt.title("Original Signal")
+                        plt.subplot(3, 1, 2)
+                        plt.specgram(array_signals[0][0], NFFT=1024, noverlap=512, Fs=fs, vmin=min_val, vmax=max_val)
+                        plt.title("Noisy Mic Signal")
+                        if denoise:
+                            plt.subplot(3, 1, 3)
+                            plt.specgram(denoised_signals[0], NFFT=1024, noverlap=512, Fs=fs, vmin=min_val, vmax=max_val)
+                            plt.title("Denoise Mic Signal")
 
 
                     # plot microphone signals
@@ -633,18 +636,19 @@ if __name__ == "__main__":
                     g, G = AFRC(aligned_and_cropped_signals, K, remove_spike)
 
                     # np.savetxt(f"simulation_calibrations/G_{SNR}_{rt60_tgt}.txt", g)
-                    np.savetxt(f"simulation_calibrations/d_{d}/G_{SNR}_{rt60_tgt}_{k}.txt", G.view(float))
+                    np.savetxt(f"simulation_calibrations/p_{precision}/G_{SNR}_{rt60_tgt}_{T}.txt", G.view(float))
+                    np.savetxt(f"simulation_calibrations/p_{precision}/g_{SNR}_{rt60_tgt}_{T}_2.txt", g.view(float))
 
 
                 if evaluate:
                     ###############################################################################################################
                     # Load calibration filter
                     ###############################################################################################################
-                    G = np.loadtxt(f"simulation_calibrations/d_{d}/G_{SNR}_{rt60_tgt}_{k}.txt").view(complex)
-
+                    G = np.loadtxt(f"simulation_calibrations/p_{precision}/G_{SNR}_{rt60_tgt}_{T}.txt").view(complex)
+                    # plt.show()
                     # load calibration filter from Matlab
-                    # g = scipy.io.loadmat('../g.mat')
-                    # G = fft(g['g'], axis=1)
+                    # g = scipy.io.loadmat(f"simulation_calibrations/p_{precision}/g_{SNR}_{rt60_tgt}_{T}_2.mat")
+                    # G = fft(g['g2'], axis=1)
 
                     ###############################################################################################################
                     # Calculate the microphone frequency response after calibration
@@ -681,13 +685,13 @@ if __name__ == "__main__":
                     alphaA, alphaP = calculate_evaluation_metrics(ICSFR_C)
                     alphaAs.append(alphaA)
                     alphaPs.append(alphaP)
-                    print("calibrated SNR: ", SNR, " RT60: ", rt60_tgt, " d: ", d, " Trial: ", k ," AlphaA: ", alphaA, " AlphaP: ", alphaP)
+                    print("calibrated SNR: ", SNR, " RT60: ", rt60_tgt, " p: ", precision, " Trial: ", T ," AlphaA: ", alphaA, " AlphaP: ", alphaP)
                     print("\n")
 
 
                 if plot_figure:
-                        plt.tight_layout()
-                        plt.show()
+                    plt.tight_layout()
+                    plt.show()
 
             alphaA_mean = mean(alphaAs)
             alphaP_mean = mean(alphaPs)

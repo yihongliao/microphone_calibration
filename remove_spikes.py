@@ -1,4 +1,5 @@
 import numpy as np
+from scipy.ndimage import median_filter
 
 def cinterp(complex_vector):
     
@@ -39,7 +40,7 @@ def cinterp(complex_vector):
     return complex_vector
 
 
-def find_spikes(YSEG, threshold=0.1, spike_size=3, K=1024):
+def find_spikes(YSEG, filter_size=15, threshold=0.1, spike_size=1, K=1024):
     num_of_mics = YSEG.shape[0]
     # find gradient
     absGRAD_mean = np.zeros((K, 1))
@@ -55,7 +56,10 @@ def find_spikes(YSEG, threshold=0.1, spike_size=3, K=1024):
     absGRAD_mean /= (num_of_mics * (num_of_mics - 1) / 2)
     phGRAD_mean /= (num_of_mics * (num_of_mics - 1) / 2)
 
-    bad_freqs_idxs = np.where(phGRAD_mean > threshold)[0]
+    #  use median filter to find spikes
+    phGRAD_mean_med = median_filter(phGRAD_mean,size=filter_size,mode='nearest',axes=0)
+
+    bad_freqs_idxs = np.where(np.abs(phGRAD_mean-phGRAD_mean_med) > threshold)[0]
     spike_idxs = []
 
     for bfi in bad_freqs_idxs:
@@ -66,10 +70,17 @@ def find_spikes(YSEG, threshold=0.1, spike_size=3, K=1024):
     
     return spike_idxs
 
-def remove_spikes(YSEG, threshold=0.5, spike_size=3, K=1024):
-    spike_idxs = find_spikes(YSEG, threshold, spike_size, K)
+def remove_spikes(YSEG, threshold=0.1, spike_size=1, K=1024):
+    spike_idxs = find_spikes(YSEG, 15, threshold, spike_size, K)
     YSEG[:,spike_idxs,:] = np.nan
     for i in range(YSEG.shape[0]):
         for j in range(YSEG.shape[2]):
             YSEG[i,:,j] = cinterp(YSEG[i,:,j])
     return YSEG
+
+def remove_spikes2(YSEG, G, filter_size=15, threshold=0.1, spike_size=1, K=1024):
+    spike_idxs = find_spikes(YSEG, filter_size, threshold, spike_size, K)
+    G[:,spike_idxs] = np.nan
+    for i in range(G.shape[0]):
+        G[i,:] = cinterp(G[i,:])    
+    return G
