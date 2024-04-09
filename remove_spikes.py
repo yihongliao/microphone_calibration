@@ -40,8 +40,9 @@ def cinterp(complex_vector):
     return complex_vector
 
 
-def find_spikes(YSEG, filter_size=15, threshold=0.1, spike_size=1, K=1024):
+def find_spikes(YSEG, filter_size=15, threshold=0.1, spike_size=1):
     num_of_mics = YSEG.shape[0]
+    K = YSEG.shape[1]
     # find gradient
     absGRAD_mean = np.zeros((K, 1))
     phGRAD_mean = np.zeros((K, 1))
@@ -70,16 +71,16 @@ def find_spikes(YSEG, filter_size=15, threshold=0.1, spike_size=1, K=1024):
     
     return spike_idxs
 
-def remove_spikes(YSEG, threshold=0.1, spike_size=1, K=1024):
-    spike_idxs = find_spikes(YSEG, 15, threshold, spike_size, K)
+def remove_spikes(YSEG, threshold=0.1, spike_size=1):
+    spike_idxs = find_spikes(YSEG, 15, threshold, spike_size)
     YSEG[:,spike_idxs,:] = np.nan
     for i in range(YSEG.shape[0]):
         for j in range(YSEG.shape[2]):
             YSEG[i,:,j] = cinterp(YSEG[i,:,j])
     return YSEG
 
-def remove_spikes2(YSEG, G, filter_size=15, threshold=0.1, spike_size=1, K=1024):
-    spike_idxs = find_spikes(YSEG, filter_size, threshold, spike_size, K)
+def remove_spikes2(YSEG, G, filter_size=15, threshold=0.1, spike_size=1):
+    spike_idxs = find_spikes(YSEG, filter_size, threshold, spike_size)
     G[:,spike_idxs] = np.nan
     for i in range(G.shape[0]):
         G[i,:] = cinterp(G[i,:])    

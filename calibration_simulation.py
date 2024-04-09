@@ -27,6 +27,7 @@ from wiener2 import wiener_filter
 from noise_reduction import noise_reduction
 from remove_spikes import remove_spikes, remove_spikes2
 import random
+import math
 
 methods = ["ism", "hybrid", "anechoic"]
 
@@ -226,20 +227,21 @@ def AFRC(y, K=1024, remove_spike=True):
     time_start = time.time()
     print('AFRC start, sample size: ', np.shape(y)[1])
     # Parameters
-    # K = 1024 # number of frequency bins
+    halfK = math.ceil((K-1)/2) + 1
     I = np.shape(y)[0] # number of microphones
     u = 0.5 # step size
 
-    N = K # number of sample points in a frame
-    O = int(N/2) # overlap length
     ITERS = 1
 
     # initialize
     G = np.ones((I,K),dtype=np.cdouble)
+    Gh = np.ones((I,halfK),dtype=np.cdouble)
 
     # calculate stft of signal
-    f, t, Ystft = stft(y, fs=fs, nperseg=N, window=np.ones(N), axis=1, return_onesided=False)
+    print(y[0, :10])
+    f, t, Ystft = stft(y, fs=fs, nperseg=K, window=np.ones(K), axis=1, return_onesided=False)
     Ystft = Ystft * K
+    print(Ystft[0, :10, 0])
 
     J_iter = []
     C_iter = []
@@ -251,15 +253,15 @@ def AFRC(y, K=1024, remove_spike=True):
         T = []
         for m in range(Ystft.shape[2]):
             # AFRC Algorithm
-            Y = Ystft[:, :, m]
-            Zm = fast_elem_mul(Y, G)
+            Y = Ystft[:, :halfK, m]
+            Zm = fast_elem_mul(Y, Gh)
             
             J.append(0)
             C.append(0)
             T.append(0)
             for i in range(I):
                 diag_YiHm = np.diag(Y[i,:].conj().T) # Eq 26
-                Dijm = np.zeros((I,K),dtype=np.cdouble)
+                Dijm = np.zeros((I,halfK),dtype=np.cdouble)
                 Zmi = Zm[i,:]
                 for j in range(I):
                     Dijm[j,:] = Zmi-Zm[j,:] # Eq 13
@@ -268,22 +270,22 @@ def AFRC(y, K=1024, remove_spike=True):
                 dJm_dGiH = fast_mul_sum(Dijm, diag_YiHm)
 
                 # Eq 24
-                dC_dGiH = 2*(fast_vec_mul(G[i,:],G[i,:].conj().T)-1)*G[i,:]
+                dC_dGiH = 2*(fast_vec_mul(Gh[i,:],Gh[i,:].conj().T)-1)*Gh[i,:]
 
                 # Eq 31
                 lm = np.absolute(fast_vec_mul(dC_dGiH,dJm_dGiH.conj().T)/fast_vec_mul(dC_dGiH,dC_dGiH.conj().T))
 
                 # Eq 27
-                dJcm_dGiH = dJm_dGiH + (2*lm*(fast_vec_mul(G[i,:],G[i,:].conj().T)-1))*G[i,:]
+                dJcm_dGiH = dJm_dGiH + (2*lm*(fast_vec_mul(Gh[i,:],Gh[i,:].conj().T)-1))*Gh[i,:]
 
                 # Eq 21
                 Gradient = -u*dJcm_dGiH
-                G[i,:] = G[i,:] + Gradient
+                Gh[i,:] = Gh[i,:] + Gradient
 
                 # Compute cost
                 for j in range(I):
                     J[-1] = J[-1] + fast_vec_mul(Dijm[j,:],Dijm[j,:].conj().T)
-                C[-1] = C[-1] + pow(fast_vec_mul(G[i,:],G[i,:].conj().T)-1, 2)
+                C[-1] = C[-1] + pow(fast_vec_mul(Gh[i,:],Gh[i,:].conj().T)-1, 2)
                 # print(C[-1])
                 T[-1] = J[-1] + lm * C[-1]
 
@@ -296,8 +298,14 @@ def AFRC(y, K=1024, remove_spike=True):
 
      # remove noise spike
     if remove_spike:
-        G = remove_spikes2(Ystft, G, 7, 0.1, 1, K)
+        Gh = remove_spikes2(Ystft[:,:halfK,:], Gh, 7, 0.1, 1)
         print("noise spike removed")
+
+    G[:,:halfK] = Gh
+    if K % 2 == 0:
+        G[:,halfK:] = np.conjugate(Gh[:,-2:0:-1])
+    else:
+        G[:,halfK:] = np.conjugate(Gh[:,-1:0:-1])
 
     g = np.real(ifft(G,axis=1)) # transform the filter back to time domain
     # g[int(K*0.9):,:] = 0
@@ -366,7 +374,7 @@ if __name__ == "__main__":
     write_eval_result = args.write
     add_noise = True
     denoise = True
-    remove_spike = True
+    remove_spike = False
     n_std_thresh_stationary = 0
 
     # import a mono wavfile as the source signal
@@ -627,10 +635,11 @@ if __name__ == "__main__":
                     # Set the target length for cropping
                     target_length = round(fs * 10)
                     # Align and crop signals
-                    aligned_and_cropped_signals = align_and_crop_signals(signals, target_length, threshold=threshold)
+                    # aligned_and_cropped_signals = align_and_crop_signals(signals, target_length, threshold=threshold)
                     
                     # If already knew the delay
-                    # aligned_and_cropped_signals = np.array([signal for signal in signals])
+                    aligned_and_cropped_signals = np.array([signal for signal in signals])
+                    print(aligned_and_cropped_signals[0][:10])
 
                     # perform AFRC
                     g, G = AFRC(aligned_and_cropped_signals, K, remove_spike)
