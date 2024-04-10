@@ -15,19 +15,16 @@ from scipy.signal import tf2sos, stft
 from scipy.fft import ifft, fft, fftshift
 import scipy.io.wavfile
 import scipy.io
-import sys
-sys.path.append(os.path.join(os.path.dirname(__file__), 'mynoisereduce'))
-import mynoisereduce as mnr
-import pyroomacoustics as pra
+import random
+import math
 from statistics import mean 
 import csv
 import os
 import time
-from wiener2 import wiener_filter
+import pyroomacoustics as pra
 from noise_reduction import noise_reduction
-from remove_spikes import remove_spikes, remove_spikes2, remove_spikes3
-import random
-import math
+from remove_spikes import remove_spikes3
+
 
 methods = ["ism", "hybrid", "anechoic"]
 
@@ -367,7 +364,6 @@ if __name__ == "__main__":
     add_noise = True
     denoise = True
     remove_spike = True
-    n_std_thresh_stationary = 0
 
     # import a mono wavfile as the source signal
     # the sampling frequency should match that of the room
@@ -530,11 +526,6 @@ if __name__ == "__main__":
                             mic_signals.append(mic_signal)
 
                         array_signals.append(mic_signals)  
-
-                    # for i, y in enumerate(array_signals):
-                    #     scipy.io.wavfile.write(f"simulation_calibrations/noisy_signal{i}_{SNR}_{rt60_tgt}.wav", fs, y[0])                                 
-                    # print("Microphone signal files written.")
-                    # time.sleep(3)
             
                     if denoise:
                         print("denoising...")
@@ -542,18 +533,8 @@ if __name__ == "__main__":
                         noise_w_calib_signals = [sigs[pos] for pos, sigs in enumerate(array_signals)]
                         for i, y in enumerate(noise_w_calib_signals):
                             scipy.io.wavfile.write(f"simulation_calibrations/noisy_signal{i}_{SNR}_{rt60_tgt}.wav", fs, y)             
-                        denoised_signals = noise_reduction(noise_w_calib_signals, signal_range)
+                        denoised_signals = noise_reduction(noise_w_calib_signals, signal_range, fs)
                         calib_signals = [sig[signal_range[0]:signal_range[1]] for sig in denoised_signals]
-
-                        ######################
-                        # for mic in range(num_of_mics):
-                        #     micsigs = []
-                        #     for pos, sigs in enumerate(array_signals):
-                        #         micsigs.append(sigs[mic])
-                        #     mic_denoised = noise_reduction(micsigs, signal_range)
-                        #     denoised_signals.append(mic_denoised[mic])
-                        # calib_signals = [sig[signal_range[0]:signal_range[1]] for sig in denoised_signals]
-
                     else:
                         calib_signals = [sigs[pos][signal_range[0]:signal_range[1]] for pos, sigs in enumerate(array_signals)]
 
@@ -609,13 +590,13 @@ if __name__ == "__main__":
                     ###############################################################################################################
                     # Calibration
                     ###############################################################################################################
-                    # plt.show()
                     # extract measurement signals
                     # Specify the directory containing your WAV files
                     wav_directory = ''
                     # List of file names
                     # file_names = [f'record_pos{x}.wav' for x in [1, 4, 2, 3]]
                     file_names = [f"simulation_calibrations/calibration_signal{i}_{SNR}_{rt60_tgt}.wav" for i in range(4)]
+
                     # List of channels to extract for each file
                     # channels_to_extract = [2, 15, 9, 8]
                     channels_to_extract = []
@@ -638,7 +619,7 @@ if __name__ == "__main__":
 
                     # np.savetxt(f"simulation_calibrations/G_{SNR}_{rt60_tgt}.txt", g)
                     np.savetxt(f"simulation_calibrations/p_{precision}/G_{SNR}_{rt60_tgt}_{T}.txt", G.view(float))
-                    np.savetxt(f"simulation_calibrations/p_{precision}/g_{SNR}_{rt60_tgt}_{T}_2.txt", g.view(float))
+                    # np.savetxt(f"simulation_calibrations/p_{precision}/g_{SNR}_{rt60_tgt}_{T}_2.txt", g.view(float))
 
 
                 if evaluate:
@@ -682,7 +663,6 @@ if __name__ == "__main__":
                     ###############################################################################################################
                     # calculate evaluation criteria
                     ###############################################################################################################
-                    # ICSFR_C = [icsfr_c[512:1536] for icsfr_c in ICSFR_C]
                     alphaA, alphaP = calculate_evaluation_metrics(ICSFR_C)
                     alphaAs.append(alphaA)
                     alphaPs.append(alphaP)
