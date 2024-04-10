@@ -25,7 +25,7 @@ import os
 import time
 from wiener2 import wiener_filter
 from noise_reduction import noise_reduction
-from remove_spikes import remove_spikes, remove_spikes2
+from remove_spikes import remove_spikes, remove_spikes2, remove_spikes3
 import random
 import math
 
@@ -229,7 +229,7 @@ def AFRC(y, K=1024, remove_spike=True):
     # Parameters
     halfK = math.ceil((K-1)/2) + 1
     I = np.shape(y)[0] # number of microphones
-    u = 0.5 # step size
+    u = 1.0 # step size
 
     ITERS = 1
 
@@ -238,27 +238,18 @@ def AFRC(y, K=1024, remove_spike=True):
     Gh = np.ones((I,halfK),dtype=np.cdouble)
 
     # calculate stft of signal
-    print(y[0, :10])
     f, t, Ystft = stft(y, fs=fs, nperseg=K, window=np.ones(K), axis=1, return_onesided=False)
     Ystft = Ystft * K
-    print(Ystft[0, :10, 0])
 
-    J_iter = []
-    C_iter = []
-    T_iter = []
+    J = np.zeros(Ystft.shape[2],dtype=np.double)
+    C = np.zeros(Ystft.shape[2],dtype=np.double)
+
     for iter in range(ITERS):
-        m = 1
-        J = []
-        C = []
-        T = []
         for m in range(Ystft.shape[2]):
             # AFRC Algorithm
             Y = Ystft[:, :halfK, m]
             Zm = fast_elem_mul(Y, Gh)
             
-            J.append(0)
-            C.append(0)
-            T.append(0)
             for i in range(I):
                 diag_YiHm = np.diag(Y[i,:].conj().T) # Eq 26
                 Dijm = np.zeros((I,halfK),dtype=np.cdouble)
@@ -282,23 +273,24 @@ def AFRC(y, K=1024, remove_spike=True):
                 Gradient = -u*dJcm_dGiH
                 Gh[i,:] = Gh[i,:] + Gradient
 
-                # Compute cost
-                for j in range(I):
-                    J[-1] = J[-1] + fast_vec_mul(Dijm[j,:],Dijm[j,:].conj().T)
-                C[-1] = C[-1] + pow(fast_vec_mul(Gh[i,:],Gh[i,:].conj().T)-1, 2)
-                # print(C[-1])
-                T[-1] = J[-1] + lm * C[-1]
+                # Compute C cost                
+                C[m] = C[m] + pow(np.real(fast_vec_mul(Gh[i,:],Gh[i,:].conj().T))-1, 2)
 
-            m = m + 1
+            # Compute J cost
+            Zm = fast_elem_mul(Y, Gh)
+            for i in range(I-1):
+                for j in range(i+1,I):
+                    Dij = Zm[i,:]-Zm[j,:]
+                    J[m] = J[m] + np.real(fast_vec_mul(Dij,Dij.conj().T))
 
-        J_iter.append(sum(J))
-        C_iter.append(sum(C))
-        T_iter.append(sum(T))
-        print(f'iter: {iter} J:{J_iter[-1]} C:{C_iter[-1]} T: {T_iter[-1]}')
+            if m > 1 and np.abs(J[m]-J[m-1]) < 0.00001:
+                break
 
-     # remove noise spike
+        print(f'iter: {iter} J:{J[m]} C:{C[m]}')
+
+    # remove noise spike
     if remove_spike:
-        Gh = remove_spikes2(Ystft[:,:halfK,:], Gh, 7, 0.1, 1)
+        Gh = remove_spikes3(Ystft[:,:halfK,:], Gh, 7, 0.1, 1)
         print("noise spike removed")
 
     G[:,:halfK] = Gh
@@ -360,12 +352,12 @@ if __name__ == "__main__":
     num_of_mics = 4
 
     # The desired reverberation time and dimensions of the room
-    SNRs = [15.0, 25.0, 35.0]  # signal-to-noise ratio in dB
-    rt60_tgts = [0.2, 0.5, 0.6]  # seconds
+    SNRs = [15.0, 20.0, 25.0, 35.0]  # signal-to-noise ratio in dB
+    rt60_tgts = [0.212, 0.28, 0.31, 0.39, 0.44]  # seconds
     trials = 1
     room_dim = [7.1, 6.0, 3.0]  # meters
     d = 0.126
-    precision = 0.000
+    precision = 0.0005
     signal_range = [fs*10, fs*20]
 
     plot_figure = args.plot
@@ -374,7 +366,7 @@ if __name__ == "__main__":
     write_eval_result = args.write
     add_noise = True
     denoise = True
-    remove_spike = False
+    remove_spike = True
     n_std_thresh_stationary = 0
 
     # import a mono wavfile as the source signal
@@ -617,7 +609,7 @@ if __name__ == "__main__":
                     ###############################################################################################################
                     # Calibration
                     ###############################################################################################################
-
+                    # plt.show()
                     # extract measurement signals
                     # Specify the directory containing your WAV files
                     wav_directory = ''
@@ -635,11 +627,11 @@ if __name__ == "__main__":
                     # Set the target length for cropping
                     target_length = round(fs * 10)
                     # Align and crop signals
-                    # aligned_and_cropped_signals = align_and_crop_signals(signals, target_length, threshold=threshold)
+                    aligned_and_cropped_signals = align_and_crop_signals(signals, target_length, threshold=threshold)
                     
                     # If already knew the delay
-                    aligned_and_cropped_signals = np.array([signal for signal in signals])
-                    print(aligned_and_cropped_signals[0][:10])
+                    # aligned_and_cropped_signals = np.array([signal for signal in signals])
+                    # print(aligned_and_cropped_signals[0][:10])
 
                     # perform AFRC
                     g, G = AFRC(aligned_and_cropped_signals, K, remove_spike)

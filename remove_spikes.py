@@ -1,6 +1,6 @@
 import numpy as np
 from scipy.ndimage import median_filter
-
+import matplotlib.pyplot as plt
 def cinterp(complex_vector):
     
     missing_indices = np.nonzero(np.isnan(complex_vector))[0]
@@ -59,7 +59,9 @@ def find_spikes(YSEG, filter_size=15, threshold=0.1, spike_size=1):
 
     #  use median filter to find spikes
     phGRAD_mean_med = median_filter(phGRAD_mean,size=filter_size,mode='nearest',axes=0)
-
+    fig1, ax1 = plt.subplots()
+    ax1.plot(np.abs(phGRAD_mean-phGRAD_mean_med))
+    # plt.show()
     bad_freqs_idxs = np.where(np.abs(phGRAD_mean-phGRAD_mean_med) > threshold)[0]
     spike_idxs = []
 
@@ -84,4 +86,15 @@ def remove_spikes2(YSEG, G, filter_size=15, threshold=0.1, spike_size=1):
     G[:,spike_idxs] = np.nan
     for i in range(G.shape[0]):
         G[i,:] = cinterp(G[i,:])    
+    return G
+
+def remove_spikes3(YSEG, G, filter_size=15, threshold=0.1, spike_size=1):
+    spike_idxs = find_spikes(YSEG, filter_size, threshold, spike_size)
+    G_abs = np.abs(G)
+    G_ph = np.angle(G)
+    G_abs_m = median_filter(G_abs,size=filter_size,mode='nearest',axes=1)
+    G_ph_m = median_filter(G_ph,size=filter_size,mode='nearest',axes=1)
+    G_abs[:,spike_idxs] = G_abs_m[:,spike_idxs]
+    G_ph[:,spike_idxs] = G_ph_m[:,spike_idxs]
+    G = G_abs * np.exp(1j * G_ph)
     return G

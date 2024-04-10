@@ -1,4 +1,7 @@
 import numpy as np
+from scipy import signal
+from scipy.fft import ifft, fft, fftshift
+import matplotlib.pyplot as plt
 import time
 
 def fast_mul(A, B):
@@ -50,6 +53,12 @@ def wiener_filter(nsignals, signal_range, delay=100, rank="full"):
     yd = nsignals
     y = nsignals[:,signal_range[0]:signal_range[1]]
     d = nsignals[:,:signal_range[0]]
+
+    # low pass filter on noise
+    sos = signal.iirfilter(17, 11050, rs=60, btype='lowpass',
+                       analog=False, ftype='cheby2', fs=44100,
+                       output='sos')
+    d = signal.sosfilt(sos, d, axis=1)
 
     # stack delayed signals
     Ya, M_s = stack_delay_data(y, delay)
