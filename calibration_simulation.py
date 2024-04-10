@@ -280,7 +280,7 @@ def AFRC(y, K=1024, remove_spike=True):
                     Dij = Zm[i,:]-Zm[j,:]
                     J[m] = J[m] + np.real(fast_vec_mul(Dij,Dij.conj().T))
 
-            if m > 1 and np.abs(J[m]-J[m-1]) < 0.00001:
+            if m > 1 and np.abs(J[m]-J[m-1]) < 0.00005:
                 break
 
         print(f'iter: {iter} J:{J[m]} C:{C[m]}')

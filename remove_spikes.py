@@ -62,6 +62,11 @@ def find_spikes(YSEG, filter_size=15, threshold=0.1, spike_size=1):
     phGRAD_mean_med = median_filter(phGRAD_mean,size=filter_size,mode='nearest',axes=0)
     fig1, ax1 = plt.subplots()
     ax1.plot(np.abs(phGRAD_mean-phGRAD_mean_med))
+
+    # fig1, ax1 = plt.subplots()
+    # ax1.plot(phGRAD_mean)
+    # ax1.plot(phGRAD_mean_med)
+
     # plt.show()
     bad_freqs_idxs = np.where(np.abs(phGRAD_mean-phGRAD_mean_med) > threshold)[0]
     spike_idxs = []
