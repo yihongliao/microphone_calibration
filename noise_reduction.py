@@ -24,9 +24,9 @@ def subtract_noise_from_signal(signal, noise):
     return denoised_signal.real  # Take the real part to remove negligible imaginary part
 
 
-def noise_reduction(mic_signals, signal_range):
+def noise_reduction(mic_signals, signal_range, fs):
     noisy_signals = mic_signals.copy()
     # denoised_signals = wiener_filter(noisy_signals, signal_range, False, 64, 1)  
-    denoised_signals = wiener_filter(noisy_signals, signal_range, 0, "full")  
+    denoised_signals = wiener_filter(noisy_signals, signal_range, 15, "full", fs)  
 
     return denoised_signals

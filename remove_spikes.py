@@ -1,5 +1,6 @@
 import numpy as np
 from scipy.ndimage import median_filter
+import matplotlib.pyplot as plt
 
 def cinterp(complex_vector):
     
@@ -40,8 +41,9 @@ def cinterp(complex_vector):
     return complex_vector
 
 
-def find_spikes(YSEG, filter_size=15, threshold=0.1, spike_size=1, K=1024):
+def find_spikes(YSEG, filter_size=15, threshold=0.1, spike_size=1):
     num_of_mics = YSEG.shape[0]
+    K = YSEG.shape[1]
     # find gradient
     absGRAD_mean = np.zeros((K, 1))
     phGRAD_mean = np.zeros((K, 1))
@@ -58,7 +60,9 @@ def find_spikes(YSEG, filter_size=15, threshold=0.1, spike_size=1, K=1024):
 
     #  use median filter to find spikes
     phGRAD_mean_med = median_filter(phGRAD_mean,size=filter_size,mode='nearest',axes=0)
-
+    fig1, ax1 = plt.subplots()
+    ax1.plot(np.abs(phGRAD_mean-phGRAD_mean_med))
+    # plt.show()
     bad_freqs_idxs = np.where(np.abs(phGRAD_mean-phGRAD_mean_med) > threshold)[0]
     spike_idxs = []
 
@@ -70,17 +74,28 @@ def find_spikes(YSEG, filter_size=15, threshold=0.1, spike_size=1, K=1024):
     
     return spike_idxs
 
-def remove_spikes(YSEG, threshold=0.1, spike_size=1, K=1024):
-    spike_idxs = find_spikes(YSEG, 15, threshold, spike_size, K)
+def remove_spikes(YSEG, threshold=0.1, spike_size=1):
+    spike_idxs = find_spikes(YSEG, 15, threshold, spike_size)
     YSEG[:,spike_idxs,:] = np.nan
     for i in range(YSEG.shape[0]):
         for j in range(YSEG.shape[2]):
             YSEG[i,:,j] = cinterp(YSEG[i,:,j])
     return YSEG
 
-def remove_spikes2(YSEG, G, filter_size=15, threshold=0.1, spike_size=1, K=1024):
-    spike_idxs = find_spikes(YSEG, filter_size, threshold, spike_size, K)
+def remove_spikes2(YSEG, G, filter_size=15, threshold=0.1, spike_size=1):
+    spike_idxs = find_spikes(YSEG, filter_size, threshold, spike_size)
     G[:,spike_idxs] = np.nan
     for i in range(G.shape[0]):
         G[i,:] = cinterp(G[i,:])    
+    return G
+
+def remove_spikes3(YSEG, G, filter_size=15, threshold=0.1, spike_size=1):
+    spike_idxs = find_spikes(YSEG, filter_size, threshold, spike_size)
+    G_abs = np.abs(G)
+    G_ph = np.angle(G)
+    G_abs_m = median_filter(G_abs,size=filter_size,mode='nearest',axes=1)
+    G_ph_m = median_filter(G_ph,size=filter_size,mode='nearest',axes=1)
+    G_abs[:,spike_idxs] = G_abs_m[:,spike_idxs]
+    G_ph[:,spike_idxs] = G_ph_m[:,spike_idxs]
+    G = G_abs * np.exp(1j * G_ph)
     return G

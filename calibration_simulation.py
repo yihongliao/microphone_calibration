@@ -15,18 +15,16 @@ from scipy.signal import tf2sos, stft
 from scipy.fft import ifft, fft, fftshift
 import scipy.io.wavfile
 import scipy.io
-import sys
-sys.path.append(os.path.join(os.path.dirname(__file__), 'mynoisereduce'))
-import mynoisereduce as mnr
-import pyroomacoustics as pra
+import random
+import math
 from statistics import mean 
 import csv
 import os
 import time
-from wiener2 import wiener_filter
+import pyroomacoustics as pra
 from noise_reduction import noise_reduction
-from remove_spikes import remove_spikes, remove_spikes2
-import random
+from remove_spikes import remove_spikes3
+
 
 methods = ["ism", "hybrid", "anechoic"]
 
@@ -226,40 +224,32 @@ def AFRC(y, K=1024, remove_spike=True):
     time_start = time.time()
     print('AFRC start, sample size: ', np.shape(y)[1])
     # Parameters
-    # K = 1024 # number of frequency bins
+    halfK = math.ceil((K-1)/2) + 1
     I = np.shape(y)[0] # number of microphones
-    u = 0.5 # step size
+    u = 1.0 # step size
 
-    N = K # number of sample points in a frame
-    O = int(N/2) # overlap length
     ITERS = 1
 
     # initialize
     G = np.ones((I,K),dtype=np.cdouble)
+    Gh = np.ones((I,halfK),dtype=np.cdouble)
 
     # calculate stft of signal
-    f, t, Ystft = stft(y, fs=fs, nperseg=N, window=np.ones(N), axis=1, return_onesided=False)
+    f, t, Ystft = stft(y, fs=fs, nperseg=K, window=np.ones(K), axis=1, return_onesided=False)
     Ystft = Ystft * K
 
-    J_iter = []
-    C_iter = []
-    T_iter = []
+    J = np.zeros(Ystft.shape[2],dtype=np.double)
+    C = np.zeros(Ystft.shape[2],dtype=np.double)
+
     for iter in range(ITERS):
-        m = 1
-        J = []
-        C = []
-        T = []
         for m in range(Ystft.shape[2]):
             # AFRC Algorithm
-            Y = Ystft[:, :, m]
-            Zm = fast_elem_mul(Y, G)
+            Y = Ystft[:, :halfK, m]
+            Zm = fast_elem_mul(Y, Gh)
             
-            J.append(0)
-            C.append(0)
-            T.append(0)
             for i in range(I):
                 diag_YiHm = np.diag(Y[i,:].conj().T) # Eq 26
-                Dijm = np.zeros((I,K),dtype=np.cdouble)
+                Dijm = np.zeros((I,halfK),dtype=np.cdouble)
                 Zmi = Zm[i,:]
                 for j in range(I):
                     Dijm[j,:] = Zmi-Zm[j,:] # Eq 13
@@ -268,36 +258,43 @@ def AFRC(y, K=1024, remove_spike=True):
                 dJm_dGiH = fast_mul_sum(Dijm, diag_YiHm)
 
                 # Eq 24
-                dC_dGiH = 2*(fast_vec_mul(G[i,:],G[i,:].conj().T)-1)*G[i,:]
+                dC_dGiH = 2*(fast_vec_mul(Gh[i,:],Gh[i,:].conj().T)-1)*Gh[i,:]
 
                 # Eq 31
                 lm = np.absolute(fast_vec_mul(dC_dGiH,dJm_dGiH.conj().T)/fast_vec_mul(dC_dGiH,dC_dGiH.conj().T))
 
                 # Eq 27
-                dJcm_dGiH = dJm_dGiH + (2*lm*(fast_vec_mul(G[i,:],G[i,:].conj().T)-1))*G[i,:]
+                dJcm_dGiH = dJm_dGiH + (2*lm*(fast_vec_mul(Gh[i,:],Gh[i,:].conj().T)-1))*Gh[i,:]
 
                 # Eq 21
                 Gradient = -u*dJcm_dGiH
-                G[i,:] = G[i,:] + Gradient
+                Gh[i,:] = Gh[i,:] + Gradient
 
-                # Compute cost
-                for j in range(I):
-                    J[-1] = J[-1] + fast_vec_mul(Dijm[j,:],Dijm[j,:].conj().T)
-                C[-1] = C[-1] + pow(fast_vec_mul(G[i,:],G[i,:].conj().T)-1, 2)
-                # print(C[-1])
-                T[-1] = J[-1] + lm * C[-1]
+                # Compute C cost                
+                C[m] = C[m] + pow(np.real(fast_vec_mul(Gh[i,:],Gh[i,:].conj().T))-1, 2)
 
-            m = m + 1
+            # Compute J cost
+            Zm = fast_elem_mul(Y, Gh)
+            for i in range(I-1):
+                for j in range(i+1,I):
+                    Dij = Zm[i,:]-Zm[j,:]
+                    J[m] = J[m] + np.real(fast_vec_mul(Dij,Dij.conj().T))
 
-        J_iter.append(sum(J))
-        C_iter.append(sum(C))
-        T_iter.append(sum(T))
-        print(f'iter: {iter} J:{J_iter[-1]} C:{C_iter[-1]} T: {T_iter[-1]}')
+            if m > 1 and np.abs(J[m]-J[m-1]) < 0.00001:
+                break
 
-     # remove noise spike
+        print(f'iter: {iter} J:{J[m]} C:{C[m]}')
+
+    # remove noise spike
     if remove_spike:
-        G = remove_spikes2(Ystft, G, 7, 0.1, 1, K)
+        Gh = remove_spikes3(Ystft[:,:halfK,:], Gh, 7, 0.1, 1)
         print("noise spike removed")
+
+    G[:,:halfK] = Gh
+    if K % 2 == 0:
+        G[:,halfK:] = np.conjugate(Gh[:,-2:0:-1])
+    else:
+        G[:,halfK:] = np.conjugate(Gh[:,-1:0:-1])
 
     g = np.real(ifft(G,axis=1)) # transform the filter back to time domain
     # g[int(K*0.9):,:] = 0
@@ -352,12 +349,12 @@ if __name__ == "__main__":
     num_of_mics = 4
 
     # The desired reverberation time and dimensions of the room
-    SNRs = [15.0, 25.0, 35.0]  # signal-to-noise ratio in dB
-    rt60_tgts = [0.2, 0.5, 0.6]  # seconds
+    SNRs = [15.0, 20.0, 25.0, 35.0]  # signal-to-noise ratio in dB
+    rt60_tgts = [0.212, 0.28, 0.31, 0.39, 0.44]  # seconds
     trials = 1
     room_dim = [7.1, 6.0, 3.0]  # meters
     d = 0.126
-    precision = 0.000
+    precision = 0.0005
     signal_range = [fs*10, fs*20]
 
     plot_figure = args.plot
@@ -367,7 +364,6 @@ if __name__ == "__main__":
     add_noise = True
     denoise = True
     remove_spike = True
-    n_std_thresh_stationary = 0
 
     # import a mono wavfile as the source signal
     # the sampling frequency should match that of the room
@@ -530,11 +526,6 @@ if __name__ == "__main__":
                             mic_signals.append(mic_signal)
 
                         array_signals.append(mic_signals)  
-
-                    # for i, y in enumerate(array_signals):
-                    #     scipy.io.wavfile.write(f"simulation_calibrations/noisy_signal{i}_{SNR}_{rt60_tgt}.wav", fs, y[0])                                 
-                    # print("Microphone signal files written.")
-                    # time.sleep(3)
             
                     if denoise:
                         print("denoising...")
@@ -542,18 +533,8 @@ if __name__ == "__main__":
                         noise_w_calib_signals = [sigs[pos] for pos, sigs in enumerate(array_signals)]
                         for i, y in enumerate(noise_w_calib_signals):
                             scipy.io.wavfile.write(f"simulation_calibrations/noisy_signal{i}_{SNR}_{rt60_tgt}.wav", fs, y)             
-                        denoised_signals = noise_reduction(noise_w_calib_signals, signal_range)
+                        denoised_signals = noise_reduction(noise_w_calib_signals, signal_range, fs)
                         calib_signals = [sig[signal_range[0]:signal_range[1]] for sig in denoised_signals]
-
-                        ######################
-                        # for mic in range(num_of_mics):
-                        #     micsigs = []
-                        #     for pos, sigs in enumerate(array_signals):
-                        #         micsigs.append(sigs[mic])
-                        #     mic_denoised = noise_reduction(micsigs, signal_range)
-                        #     denoised_signals.append(mic_denoised[mic])
-                        # calib_signals = [sig[signal_range[0]:signal_range[1]] for sig in denoised_signals]
-
                     else:
                         calib_signals = [sigs[pos][signal_range[0]:signal_range[1]] for pos, sigs in enumerate(array_signals)]
 
@@ -609,13 +590,13 @@ if __name__ == "__main__":
                     ###############################################################################################################
                     # Calibration
                     ###############################################################################################################
-
                     # extract measurement signals
                     # Specify the directory containing your WAV files
                     wav_directory = ''
                     # List of file names
                     # file_names = [f'record_pos{x}.wav' for x in [1, 4, 2, 3]]
                     file_names = [f"simulation_calibrations/calibration_signal{i}_{SNR}_{rt60_tgt}.wav" for i in range(4)]
+
                     # List of channels to extract for each file
                     # channels_to_extract = [2, 15, 9, 8]
                     channels_to_extract = []
@@ -631,13 +612,14 @@ if __name__ == "__main__":
                     
                     # If already knew the delay
                     # aligned_and_cropped_signals = np.array([signal for signal in signals])
+                    # print(aligned_and_cropped_signals[0][:10])
 
                     # perform AFRC
                     g, G = AFRC(aligned_and_cropped_signals, K, remove_spike)
 
                     # np.savetxt(f"simulation_calibrations/G_{SNR}_{rt60_tgt}.txt", g)
                     np.savetxt(f"simulation_calibrations/p_{precision}/G_{SNR}_{rt60_tgt}_{T}.txt", G.view(float))
-                    np.savetxt(f"simulation_calibrations/p_{precision}/g_{SNR}_{rt60_tgt}_{T}_2.txt", g.view(float))
+                    # np.savetxt(f"simulation_calibrations/p_{precision}/g_{SNR}_{rt60_tgt}_{T}_2.txt", g.view(float))
 
 
                 if evaluate:
@@ -681,7 +663,6 @@ if __name__ == "__main__":
                     ###############################################################################################################
                     # calculate evaluation criteria
                     ###############################################################################################################
-                    # ICSFR_C = [icsfr_c[512:1536] for icsfr_c in ICSFR_C]
                     alphaA, alphaP = calculate_evaluation_metrics(ICSFR_C)
                     alphaAs.append(alphaA)
                     alphaPs.append(alphaP)
