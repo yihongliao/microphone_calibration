@@ -350,8 +350,8 @@ if __name__ == "__main__":
 
     # The desired reverberation time and dimensions of the room
     SNRs = [15.0, 20.0, 25.0, 35.0]  # signal-to-noise ratio in dB
-    rt60_tgts = [0.212, 0.28, 0.31, 0.39, 0.44]  # seconds
-    trials = 1
+    rt60_tgts = [0.215, 0.28, 0.335, 0.39, 0.44]  # seconds
+    trials = 5
     room_dim = [7.1, 6.0, 3.0]  # meters
     d = 0.126
     precision = 0.0005
@@ -508,14 +508,28 @@ if __name__ == "__main__":
                             mic_signal = s
 
                             if add_noise:
-                                # noise = pink_noise(len(s))
-                                # noise = arm_noise(len(s))
                                 Es = sum(np.power(s[signal_range[0]:signal_range[1]], 2))
                                 En = sum(np.power(noise[signal_range[0]:signal_range[1]], 2))
                                 alpha = np.sqrt(Es/(10**(SNR/10)*En))
                                 mic_signal = s + alpha*noise
                             
                             signals.append(mic_signal)
+
+                        if args.method == "ism":
+                            # measure the reverberation time
+                            rt60 = room.measure_rt60()
+                            # print("The desired RT60 was {}".format(rt60_tgt))
+                            print("The measured RT60 is {}".format(rt60[0, 0]))
+
+                            if plot_figure:
+                                # plot the RIRs
+                                select = None  # plot all RIR
+                                # # select = (2, 0)  # uncomment to only plot the RIR from mic 2 -> src 0
+                                # # select = [(0, 0), (2, 0)]  # only mic 0 -> src 0, mic 2 -> src 0
+                                fig, axes = room.plot_rir(select=select, kind="ir")  # impulse responses
+                                # fig, axes = room.plot_rir(select=select, kind="tf")  # transfer function
+                                fig, axes = room.plot_rir(select=select, kind="spec")  # spectrograms
+
 
                         ###############################################################################################################
                         # Create microphone filtered signals
@@ -569,23 +583,6 @@ if __name__ == "__main__":
                             axs[i].set_ylim(-0.05, 0.05)
                             if i == len(calib_signals) - 1:
                                 axs[i].set_xlabel('Time [s]')
-
-                    if args.method == "ism":
-                        # measure the reverberation time
-                        rt60 = room.measure_rt60()
-                        # print("The desired RT60 was {}".format(rt60_tgt))
-                        print("The measured RT60 is {}".format(rt60[0, 0]))
-
-                        if plot_figure:
-                            # plot the RIRs
-                            select = None  # plot all RIR
-                            # # select = (2, 0)  # uncomment to only plot the RIR from mic 2 -> src 0
-                            # # select = [(0, 0), (2, 0)]  # only mic 0 -> src 0, mic 2 -> src 0
-                            fig, axes = room.plot_rir(select=select, kind="ir")  # impulse responses
-                            # fig, axes = room.plot_rir(select=select, kind="tf")  # transfer function
-                            fig, axes = room.plot_rir(select=select, kind="spec")  # spectrograms
-
-                   
 
                     ###############################################################################################################
                     # Calibration
