@@ -39,7 +39,7 @@ def sort_eigenvectors(D, V):
     D = np.diag(D)
     return D, V
 
-def wiener_filter(nsignals, signal_range, delay=15, rank="full", fs=44100):
+def wiener_filter(nsignals, signal_range, lp=True, delay=15, rank="full", fs=44100):
     s = time.time()
     # check if it's a list
     islist = isinstance(nsignals, list)
@@ -52,11 +52,12 @@ def wiener_filter(nsignals, signal_range, delay=15, rank="full", fs=44100):
     y = nsignals[:,signal_range[0]:signal_range[1]]
     d = nsignals[:,:signal_range[0]]
 
-    # low pass filter on noise
-    sos = signal.iirfilter(17, fs/4, rs=60, btype='lowpass',
-                       analog=False, ftype='cheby2', fs=fs,
-                       output='sos')
-    d = signal.sosfilt(sos, d, axis=1)
+    if lp:
+        # low pass filter on noise
+        sos = signal.iirfilter(17, fs/4, rs=60, btype='lowpass',
+                        analog=False, ftype='cheby2', fs=fs,
+                        output='sos')
+        d = signal.sosfilt(sos, d, axis=1)
 
     # stack delayed signals
     Ya, M_s = stack_delay_data(y, delay)

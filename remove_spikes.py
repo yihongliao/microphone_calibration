@@ -67,6 +67,9 @@ def find_spikes(YSEG, filter_size=15, threshold=0.1, spike_size=1):
     # ax1.plot(phGRAD_mean)
     # ax1.plot(phGRAD_mean_med)
 
+    # np.savetxt(f"simulation_calibrations/phgrad.txt", phGRAD_mean.view(float))
+    # np.savetxt(f"simulation_calibrations/phgradm.txt", phGRAD_mean_med.view(float))
+
     # plt.show()
     bad_freqs_idxs = np.where(np.abs(phGRAD_mean-phGRAD_mean_med) > threshold)[0]
     spike_idxs = []
@@ -98,9 +101,14 @@ def remove_spikes3(YSEG, G, filter_size=15, threshold=0.1, spike_size=1):
     spike_idxs = find_spikes(YSEG, filter_size, threshold, spike_size)
     G_abs = np.abs(G)
     G_ph = np.angle(G)
+    # np.savetxt(f"simulation_calibrations/G_abs.txt", G_abs.view(float))
+    # np.savetxt(f"simulation_calibrations/G_ph.txt", G_ph.view(float))
     G_abs_m = median_filter(G_abs,size=filter_size,mode='nearest',axes=1)
     G_ph_m = median_filter(G_ph,size=filter_size,mode='nearest',axes=1)
     G_abs[:,spike_idxs] = G_abs_m[:,spike_idxs]
     G_ph[:,spike_idxs] = G_ph_m[:,spike_idxs]
+    # np.savetxt(f"simulation_calibrations/G_abs2.txt", G_abs.view(float))
+    # np.savetxt(f"simulation_calibrations/G_ph2.txt", G_ph.view(float))
     G = G_abs * np.exp(1j * G_ph)
+
     return G
