@@ -16,3 +16,4 @@ python calibration_simulation.py -m ism -c -e -p
 run DOA_simulation2D_ideal.py using the following command after calibration
 ```
 python DOA_simulation2D_ideal.py
+```
