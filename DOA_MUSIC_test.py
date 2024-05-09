@@ -125,8 +125,8 @@ if __name__ == "__main__":
     freq_bins = np.arange(5, 60)  # FFT bins to use for estimation
 
     # We use a rectangular array with radius 4.2 cm # and 16 microphones
-    R = pra.square_2D_array([5.0, 5.0], 4, 4, 0, 0.042)
-    R = np.vstack((R[0], R[1], np.array([5.0 for i in range(16)])))
+    R = pra.square_2D_array([5.0, 5.0], 2, 2, 0, 0.126)
+    R = np.vstack((R[0], R[1], np.array([5.0 for i in range(4)])))
     # print(R)
 
     signals = []
@@ -161,6 +161,7 @@ if __name__ == "__main__":
         # add the source
         # source_location = room_dim / 2 + distance * np.r_[0, np.cos(azimuth), np.sin(azimuth)]
         source_location = room_dim / 2 + distance * np.r_[np.sin(colaltitude)*np.cos(azimuth), np.sin(colaltitude)*np.sin(azimuth), np.cos(colaltitude)]
+        print(source_location)
         # source_location = [8, 6, 9]
         source_signal = np.random.randn((nfft // 2 + 1) * nfft)
         aroom.add_source(source_location, signal=source_signal)
