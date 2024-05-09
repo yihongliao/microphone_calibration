@@ -377,7 +377,7 @@ if __name__ == "__main__":
     ###############################################################################################################
     fs = 44100
     K = 1024
-    num_of_mics = 8
+    num_of_mics = 16
 
     # The desired reverberation time and dimensions of the room
     SNRs = [20.0, 25.0, 30.0, 35.0]  # signal-to-noise ratio in dB
@@ -421,7 +421,7 @@ if __name__ == "__main__":
        ics = scipy.signal.iirfilter(17, [1000+i*100, 20000-i*100], rs=60, btype='band',
                         analog=False, ftype='cheby2', fs=fs,
                         output='sos')
-       ics[0,:3] = ics[0,:3] * pow(10,i*2/20)
+       ics[0,:3] = ics[0,:3] * pow(10,i*1/20)
        ICS.append(ics)
 
     ICSFR_O = []
@@ -451,10 +451,11 @@ if __name__ == "__main__":
             ax[1].axis((0.01, fs/2000, -4, 4))
             ax[0].grid(which='both', axis='both')
             ax[1].grid(which='both', axis='both')   
-        ax[0].legend(fontsize=18)
+        # ax[0].legend(fontsize=18)
         # fig.suptitle('Original Microphone Frequency Response')
 
     fig.subplots_adjust(left=0.16, right=0.99, bottom=0.1, top=0.99, hspace=0.1, wspace=0.2)
+    plt.show()
         
     ###############################################################################################################
     # Start simulation
@@ -475,8 +476,8 @@ if __name__ == "__main__":
                     # We invert Sabine's formula to obtain the parameters for the ISM simulator
                     e_absorption, max_order = pra.inverse_sabine(rt60_tgt, room_dim)
 
-                    mic_array_movements = generate_mic_array_movements(2, 4, d, precision)
-                    mic_array_initial_loc = generate_mic_initial_locations(2, 4, d, np.array([2.45, 3.3, 1.3]))
+                    mic_array_movements = generate_mic_array_movements(4, 4, d, precision)
+                    mic_array_initial_loc = generate_mic_initial_locations(4, 4, d, np.array([2.45, 3.3, 1.3]))
 
                     if add_noise:
                         print("Noise added, Denoise: ", denoise)
@@ -681,7 +682,7 @@ if __name__ == "__main__":
                             ax[1].axis((0.01, fs/2000, -4, 4))
                             ax[0].grid(which='both', axis='both')
                             ax[1].grid(which='both', axis='both')   
-                        ax[0].legend(fontsize=18)
+                        # ax[0].legend(fontsize=18)
                         # fig.suptitle('Calibrated microphone ICS Frequency Response')
                         fig.subplots_adjust(left=0.16, right=0.99, bottom=0.1, top=0.99, hspace=0.1, wspace=0.2)
 
