@@ -20,7 +20,7 @@ def list_output_devices():
     for i, device in enumerate(devices):
         print(f"{i}. {device['name']}")
 
-def play_and_record(wav_file, input_device_id, output_device_id, output_file):
+def play_and_record(wav_file, input_device_id, output_device_id, output_file, chs=16):
 
     audio_data, sample_rate = sf.read(wav_file, dtype=np.int16)
     # print(audio_data.shape)
@@ -28,7 +28,7 @@ def play_and_record(wav_file, input_device_id, output_device_id, output_file):
     sd.default.device = input_device_id, output_device_id
     sd.default.dtype = 'int16'
 
-    recorded_audio = sd.playrec(audio_data, samplerate = sample_rate, channels=16)
+    recorded_audio = sd.playrec(audio_data, samplerate=sample_rate, channels=chs)
     sd.wait()
 
     # Save the recorded audio to a new WAV file
@@ -38,7 +38,17 @@ def play_and_record(wav_file, input_device_id, output_device_id, output_file):
 
 if __name__ == "__main__":
 
+    calib_file_path = '../signal/white_noise_with_10s_silence.wav'  # Replace with the path to your WAV file
+    sweep_file_path = '../signal/frequency_sweep.wav'
+    output_file_path = '../measurements/test/'
+    channels = 16
+
+    ########################################################
+
     list_output_devices()
+    input_device_id = int(input("input_device_id: ")) 
+    output_device_id = int(input("output_device_id: "))  
+    channels = int(input("channels: "))  
 
     #######################################################
     """
@@ -73,12 +83,6 @@ if __name__ == "__main__":
     arm.set_mode(0)
     # set state: sport state
     arm.set_state(state=0)
-    ########################################################
-
-    wav_file_path = '../signal/Chirp_Sound_cycle.wav'  # Replace with the path to your WAV file
-    output_file_path = '../measurements/calibration/'
-    input_device_id = 2
-    output_device_id = 4  # Replace with the ID of the desired output device
 
     ########################################################
 
@@ -86,27 +90,44 @@ if __name__ == "__main__":
     arm.set_position(x=start_pos[0], y=start_pos[1], z=start_pos[2], roll=start_pos[3], pitch=start_pos[4], yaw=start_pos[5], speed=speed, is_radian=False, wait=True)
     print(arm.get_position(), arm.get_position(is_radian=False))
 
-    output_file = output_file_path + f'record_pos{1}.wav'
-    play_and_record(wav_file_path, input_device_id, output_device_id, output_file)
+    time.sleep(1)
+    output_calib_file = output_file_path + f'calib_pos{0}.wav'
+    output_sweep_file = output_file_path + f'sweep_pos{0}.wav'
+    play_and_record(calib_file_path, input_device_id, output_device_id, output_calib_file, channels)
+    time.sleep(0.5)
+    play_and_record(sweep_file_path, input_device_id, output_device_id, output_sweep_file, channels)
     
-    arm.set_position(x=start_pos[0]-square_step, y=start_pos[1], z=start_pos[2], roll=start_pos[3], pitch=start_pos[4], yaw=start_pos[5], speed=speed, is_radian=False, wait=True)
+    arm.set_position(x=start_pos[0]+square_step, y=start_pos[1], z=start_pos[2], roll=start_pos[3], pitch=start_pos[4], yaw=start_pos[5], speed=speed, is_radian=False, wait=True)
     print(arm.get_position(), arm.get_position(is_radian=False))
 
-    output_file = output_file_path + f'record_pos{2}.wav'
-    play_and_record(wav_file_path, input_device_id, output_device_id, output_file)
+    time.sleep(1)
+    output_calib_file = output_file_path + f'calib_pos{1}.wav'
+    output_sweep_file = output_file_path + f'sweep_pos{1}.wav'
+    play_and_record(calib_file_path, input_device_id, output_device_id, output_calib_file, channels)
+    time.sleep(0.5)
+    play_and_record(sweep_file_path, input_device_id, output_device_id, output_sweep_file, channels)
 
-    arm.set_position(x=start_pos[0]-square_step, y=start_pos[1], z=start_pos[2]-square_step, roll=start_pos[3], pitch=start_pos[4], yaw=start_pos[5], speed=speed, is_radian=False, wait=True)
+    arm.set_position(x=start_pos[0]+square_step, y=start_pos[1], z=start_pos[2]-square_step, roll=start_pos[3], pitch=start_pos[4], yaw=start_pos[5], speed=speed, is_radian=False, wait=True)
     print(arm.get_position(), arm.get_position(is_radian=False))
 
-    output_file = output_file_path + f'record_pos{3}.wav'
-    play_and_record(wav_file_path, input_device_id, output_device_id, output_file)
+    time.sleep(1)
+    output_calib_file = output_file_path + f'calib_pos{2}.wav'
+    output_sweep_file = output_file_path + f'sweep_pos{2}.wav'
+    play_and_record(calib_file_path, input_device_id, output_device_id, output_calib_file, channels)
+    time.sleep(0.5)
+    play_and_record(sweep_file_path, input_device_id, output_device_id, output_sweep_file, channels)
 
     arm.set_position(x=start_pos[0], y=start_pos[1], z=start_pos[2]-square_step, roll=start_pos[3], pitch=start_pos[4], yaw=start_pos[5], speed=speed, is_radian=False, wait=True)
     print(arm.get_position(), arm.get_position(is_radian=False))
 
-    output_file = output_file_path + f'record_pos{4}.wav'
-    play_and_record(wav_file_path, input_device_id, output_device_id, output_file)
+    time.sleep(1)
+    output_calib_file = output_file_path + f'calib_pos{3}.wav'
+    output_sweep_file = output_file_path + f'sweep_pos{3}.wav'
+    play_and_record(calib_file_path, input_device_id, output_device_id, output_calib_file, channels)
+    time.sleep(0.5)
+    play_and_record(sweep_file_path, input_device_id, output_device_id, output_sweep_file, channels)
 
+    # back to start position
     arm.set_position(x=start_pos[0], y=start_pos[1], z=start_pos[2], roll=start_pos[3], pitch=start_pos[4], yaw=start_pos[5], speed=speed, is_radian=False, wait=True)
     print(arm.get_position(), arm.get_position(is_radian=False))
 

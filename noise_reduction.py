@@ -25,10 +25,10 @@ def subtract_noise_from_signal(signal, noise):
     return denoised_signal.real  # Take the real part to remove negligible imaginary part
 
 
-def noise_reduction(mic_signals, signal_range, fs):
+def noise_reduction(mic_signals, signal_range, fs, delay=15):
     noisy_signals = mic_signals.copy()
     # denoised_signals = wiener_filter(noisy_signals, signal_range, False, 64, 1)  
-    denoised_signals = wiener_filter(noisy_signals, signal_range, True, 15, "full", fs)  
+    denoised_signals = wiener_filter(noisy_signals, signal_range, True, delay, "full", fs)  
     # denoised_signals2 = wiener_filter(noisy_signals, signal_range, False, 15, "full", fs)  
 
     # scipy.io.wavfile.write(f"simulation_calibrations/test3.wav", fs, denoised_signals[0])

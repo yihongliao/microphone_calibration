@@ -9,7 +9,7 @@ def list_output_devices():
     for i, device in enumerate(devices):
         print(f"{i}. {device['name']}")
 
-def play_and_record(wav_file, input_device_id, output_device_id, output_file):
+def play_and_record(wav_file, input_device_id, output_device_id, output_file, chs=16):
 
     audio_data, sample_rate = sf.read(wav_file, dtype=np.int16)
     # print(audio_data.shape)
@@ -17,7 +17,7 @@ def play_and_record(wav_file, input_device_id, output_device_id, output_file):
     sd.default.device = input_device_id, output_device_id
     sd.default.dtype = 'int16'
 
-    recorded_audio = sd.playrec(audio_data, samplerate = sample_rate, channels=16)
+    recorded_audio = sd.playrec(audio_data, samplerate=sample_rate, channels=chs)
     sd.wait()
 
     # Save the recorded audio to a new WAV file
@@ -27,11 +27,12 @@ def play_and_record(wav_file, input_device_id, output_device_id, output_file):
 
 if __name__ == "__main__":
     list_output_devices()
-    wav_file_path = '../signal/white_noise_w_blank.wav'
-    input_device_id = 2
-    output_device_id = 4 
+    wav_file_path = '../signal/frequency_sweep.wav'
+    input_device_id = int(input("input_device_id: ")) 
+    output_device_id = int(input("output_device_id: "))  
+    channels = int(input("channels: "))  
 
     # output_file = f'record_pos{1}.wav'
     output_file = '../measurements/test.wav'
 
-    play_and_record(wav_file_path, input_device_id, output_device_id, output_file)
+    play_and_record(wav_file_path, input_device_id, output_device_id, output_file, channels)

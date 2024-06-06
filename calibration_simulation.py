@@ -226,7 +226,7 @@ def AFRC(y, K=1024, remove_spike=True):
     # Parameters
     halfK = math.ceil((K-1)/2) + 1
     I = np.shape(y)[0] # number of microphones
-    u = 0.0005
+    u = 0.0003
 
     ITERS = 1
 
@@ -377,7 +377,7 @@ if __name__ == "__main__":
     ###############################################################################################################
     fs = 44100
     K = 1024
-    num_of_mics = 16
+    num_of_mics = 4
 
     # The desired reverberation time and dimensions of the room
     SNRs = [20.0, 25.0, 30.0, 35.0]  # signal-to-noise ratio in dB
@@ -476,8 +476,8 @@ if __name__ == "__main__":
                     # We invert Sabine's formula to obtain the parameters for the ISM simulator
                     e_absorption, max_order = pra.inverse_sabine(rt60_tgt, room_dim)
 
-                    mic_array_movements = generate_mic_array_movements(4, 4, d, precision)
-                    mic_array_initial_loc = generate_mic_initial_locations(4, 4, d, np.array([2.45, 3.3, 1.3]))
+                    mic_array_movements = generate_mic_array_movements(2, 2, d, precision)
+                    mic_array_initial_loc = generate_mic_initial_locations(2, 2, d, np.array([2.45, 3.3, 1.3]))
 
                     if add_noise:
                         print("Noise added, Denoise: ", denoise)
@@ -632,10 +632,10 @@ if __name__ == "__main__":
                     # Set the target length for cropping
                     target_length = round(fs * 10)
                     # Align and crop signals
-                    # aligned_and_cropped_signals = align_and_crop_signals(signals, target_length, threshold=threshold)
+                    aligned_and_cropped_signals = align_and_crop_signals(signals, target_length, threshold=threshold)
                     
                     # If already knew the delay
-                    aligned_and_cropped_signals = np.array([signal for signal in signals])
+                    # aligned_and_cropped_signals = np.array([signal for signal in signals])
                     # print(aligned_and_cropped_signals[0][:10])
 
                     # perform AFRC
