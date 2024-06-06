@@ -219,12 +219,13 @@ def normalize_signals(arr):
 
 def calculate_evaluation_metrics(FRS):
     P = len(FRS)
+    n = len(FRS[0])
     alphaA = 0
     alphaP = 0
     for i in range(P-1):
         for j in range(i+1, P):
-            tmpA = sum(abs(20*np.log10(abs(FRS[i])/abs(FRS[j])))) / K
-            tmpP = sum(abs(np.angle(FRS[i])-np.angle(FRS[j]))) / K
+            tmpA = sum(abs(20*np.log10(abs(FRS[i])/abs(FRS[j])))) / n
+            tmpP = sum(abs(np.angle(FRS[i])-np.angle(FRS[j]))) / n
             alphaA += tmpA
             alphaP += tmpP
             # print(tmpA, tmpP)
@@ -310,10 +311,10 @@ def align_and_crop_signals2(signals, target_length):
 
 if __name__ == "__main__":
 
-    num_of_mics = 4
+    num_of_mics = 16
     K = 1024
-    denoise = False
-    remove_spike = False
+    denoise = True
+    remove_spike = True
 
     wav_directory = '../measurements/calibration_0605_16mics/'
     # List of file names
@@ -334,7 +335,7 @@ if __name__ == "__main__":
     if denoise:
         print("Denoising")
         noise_signal_range = [round(fs*10), round(fs*20)]
-        denoised_signals = noise_reduction(noise_w_calib_signals, noise_signal_range, fs, 5)
+        denoised_signals = noise_reduction(noise_w_calib_signals, noise_signal_range, fs, "full", 15)
     else:
         denoised_signals = noise_w_calib_signals
 
@@ -361,7 +362,7 @@ if __name__ == "__main__":
         axs[i].set_ylim(-1.0, 1.0)
         if i == len(calib_signals) - 1:
             axs[i].set_xlabel('Time [s]')
-    plt.show()
+    # plt.show()
 
     for i, y in enumerate(calib_signals):
         write(wav_directory + f"calib_1ch_pos{i}.wav", fs, y)                                 
@@ -373,6 +374,7 @@ if __name__ == "__main__":
     print("Calibrating")
     g, G = AFRC(np.array(calib_signals), K, remove_spike)
     np.savetxt(wav_directory + "G.txt", G.view(float))
+    np.savetxt(wav_directory + "g1.txt", g.view(float))
 
 
     ###############################################################################################################
@@ -388,11 +390,11 @@ if __name__ == "__main__":
     for i, sweep_signal in enumerate(sweep_signals):
         filtered_signal = frequency_domain_filter(sweep_signal, G[i,:])
         filtered_signals.append(filtered_signal)
-        write(wav_directory + f"calib_sweep_pos{i}.wav", fs, filtered_signal)      
+        write(wav_directory + f"post_calib_pos{i}.wav", fs, filtered_signal)      
 
     # print(len(fft(sweep_signals, axis=1)))
     # plt.plot(np.abs(fft(sweep_signals, axis=1)[0]))
-    # plt.show()
+    
     a, p = calculate_evaluation_metrics(fft(sweep_signals, axis=1))
     a2, p2 = calculate_evaluation_metrics(fft(filtered_signals, axis=1))
     print("before calibration: ",a, p)
@@ -403,5 +405,7 @@ if __name__ == "__main__":
 
     print(shift1)
     print(shift2)
+
+    plt.show()
 
 

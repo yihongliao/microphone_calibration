@@ -75,7 +75,10 @@ def wiener_filter(nsignals, signal_range, lp=True, delay=15, rank="full", fs=441
 
     if rank == "full":
         Q = M_s
-    # Q = 4
+    else:
+        Q = rank
+    print("rank: ", Q)
+    
     D, V = np.linalg.eig(Rdd)
     D, V = sort_eigenvectors(D, V)
     D[:,Q:] = 0

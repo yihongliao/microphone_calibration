@@ -87,12 +87,13 @@ def arm_noise(N):
 
 def calculate_evaluation_metrics(FRS):
     P = len(FRS)
+    n = len(FRS[0])
     alphaA = 0
     alphaP = 0
     for i in range(P-1):
         for j in range(i+1, P):
-            tmpA = sum(abs(20*np.log10(abs(FRS[i])/abs(FRS[j])))) / K
-            tmpP = sum(abs(np.angle(FRS[i])-np.angle(FRS[j]))) / K
+            tmpA = sum(abs(20*np.log10(abs(FRS[i])/abs(FRS[j])))) / n
+            tmpP = sum(abs(np.angle(FRS[i])-np.angle(FRS[j]))) / n
             alphaA += tmpA
             alphaP += tmpP
             # print(tmpA, tmpP)
