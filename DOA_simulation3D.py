@@ -162,7 +162,7 @@ if __name__ == "__main__":
 
     azimuth = 40.0 / 180.0 * np.pi  # 60 degrees
     colaltitude = 70.0 / 180.0 * np.pi  # 60 degrees
-    distance = 3.0  # 3 meters
+    distance = 1  # 3 meters
 
     wav_directory = "../signal/"
     file_names = ["white_noise_15s.wav"]
@@ -174,21 +174,12 @@ if __name__ == "__main__":
     # simulate microphone ICS
     ###############################################################################################################
     ICS = []
-    ICS.append(scipy.signal.iirfilter(17, [400, 21650], rs=60, btype='band',
-                    analog=False, ftype='cheby2', fs=fs,
-                    output='sos'))
-    ICS.append(scipy.signal.iirfilter(17, [1500, 20550], rs=60, btype='band',
-                    analog=False, ftype='cheby2', fs=fs,
-                    output='sos'))
-    ICS.append(scipy.signal.iirfilter(17, [1600, 21450], rs=60, btype='band',
-                    analog=False, ftype='cheby2', fs=fs,
-                    output='sos'))
-    ICS.append(scipy.signal.iirfilter(17, [1700, 20350], rs=60, btype='band',
-                    analog=False, ftype='cheby2', fs=fs,
-                    output='sos'))
-    ICS[1][0,:3] = ICS[1][0,:3] * pow(10,-1/20)
-    ICS[2][0,:3] = ICS[2][0,:3] * pow(10,3/20)
-    ICS[3][0,:3] = ICS[3][0,:3] * pow(10,-7/20)
+    for i in np.arange(-np.floor(num_of_mics/2), np.ceil(num_of_mics/2)):
+       ics = scipy.signal.iirfilter(17, [1000+i*100, 20000-i*100], rs=60, btype='band',
+                        analog=False, ftype='cheby2', fs=fs,
+                        output='sos')
+       ics[0,:3] = ics[0,:3] * pow(10,i*1/20)
+       ICS.append(ics)
 
     ICSFR_O = []
     u = scipy.signal.unit_impulse(K)
@@ -245,7 +236,8 @@ if __name__ == "__main__":
 
     # place the source in the room
     source_location = room_dim / 2 + distance * np.r_[np.sin(colaltitude)*np.cos(azimuth), np.sin(colaltitude)*np.sin(azimuth), np.cos(colaltitude)]
-    source_signal = np.random.randn((nfft // 2 + 1) * nfft)
+    # source_signal = np.random.randn((nfft // 2 + 1) * nfft)
+    source_signal = source_signals[0]
     room.add_source(source_location, signal=source_signal)
 
     ###############################################################################################################
@@ -292,7 +284,7 @@ if __name__ == "__main__":
     uncalibrated_signals = []
     callibrated_signals = []
 
-    G = np.loadtxt(f"simulation_calibrations/p_{0}/G_{35.0}_{0.28}_{0}.txt").view(complex)
+    G = np.loadtxt(f"simulation_calibrations/p_{0.0005}/G_{20.0}_{0.215}_{0}.txt").view(complex)
 
     for i in range(S.shape[0]):
         s = S[i,:]/100
@@ -300,7 +292,7 @@ if __name__ == "__main__":
 
         mic_signal = scipy.signal.sosfilt(ICS[i], s)
         uncalibrated_signals.append(mic_signal)
-
+        
         filtered_mic_signal = filter_signal_stft(mic_signal,G[i,:])
         callibrated_signals.append(filtered_mic_signal)
 

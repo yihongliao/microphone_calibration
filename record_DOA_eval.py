@@ -73,10 +73,10 @@ if __name__ == "__main__":
     arm.set_state(state=0)
     ########################################################
 
-    wav_file_path = '../signal/Sine2500Hz_Sound.wav'  # Replace with the path to your WAV file
-    output_file_path = '../measurements/DOA/5/'
-    input_device_id = 2
-    output_device_id = 4  # Replace with the ID of the desired output device
+    wav_file_path = '../signal/white_noise_with_0s_silence.wav'  # Replace with the path to your WAV file
+    output_file_path = '../measurements/DOA_0708/2/'
+    input_device_id = 1
+    output_device_id = 5  # Replace with the ID of the desired output device
 
     ########################################################
 
@@ -86,6 +86,8 @@ if __name__ == "__main__":
     for i in range(36):
         arm.set_servo_angle(servo_id=6, angle=i*10, speed=speed, is_radian=False, wait=True)
         print(arm.get_position(), arm.get_position(is_radian=False))
+        time.sleep(1)
+
         output_file = output_file_path + f'record_pos{i}.wav'
         play_and_record(wav_file_path, input_device_id, output_device_id, output_file)
 

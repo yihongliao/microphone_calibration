@@ -2,12 +2,13 @@ import numpy as np
 import matplotlib.pyplot as plt
 from scipy.io import wavfile
 from scipy.fft import fft, ifft
-from scipy.signal import tf2sos, stft
+from scipy.signal import tf2sos, stft, istft
 from scipy.io.wavfile import write
 import time
 import math
 from noise_reduction import noise_reduction
 from remove_spikes import remove_spikes3
+from scipy.signal import lfilter
 
 def crop_signals(signals, start_time, end_time, fs):
     start_sample = np.ceil(start_time * fs)
@@ -68,7 +69,7 @@ def AFRC(y, K=1024, remove_spike=True):
     # Parameters
     halfK = math.ceil((K-1)/2) + 1
     I = np.shape(y)[0] # number of microphones
-    u = 0.00005
+    u = 0.00007
 
     ITERS = 1
 
@@ -309,6 +310,19 @@ def align_and_crop_signals2(signals, target_length):
 
     return aligned_signals
 
+def filter_signal_stft(signal, G):
+    K = len(G)
+    # Compute STFT
+    f, t, Ystft = stft(signal, nperseg=K, return_onesided=False)
+
+    # Apply the filter in the frequency domain
+    filtered_Zxx = Ystft * G[:, np.newaxis]
+
+    # Reconstruct the filtered signal
+    _, filtered_signal = istft(filtered_Zxx, nperseg=K, input_onesided=False)
+
+    return np.real(filtered_signal)
+
 if __name__ == "__main__":
 
     num_of_mics = 16
@@ -374,7 +388,7 @@ if __name__ == "__main__":
     print("Calibrating")
     g, G = AFRC(np.array(calib_signals), K, remove_spike)
     np.savetxt(wav_directory + "G.txt", G.view(float))
-    np.savetxt(wav_directory + "g1.txt", g.view(float))
+    np.savetxt(wav_directory + "g_time.txt", g.view(float))
 
 
     ###############################################################################################################
@@ -382,13 +396,15 @@ if __name__ == "__main__":
     ###############################################################################################################
     print("Filtering")
     G = np.loadtxt(wav_directory + "G.txt").view(complex)
+    g = np.loadtxt(wav_directory + "g_time.txt").view(float)
 
     # fs, sweep_signals = extract_measurements(wav_directory, sweep_file_names, channels_to_extract)
     sweep_signals = calib_signals
 
     filtered_signals = []
     for i, sweep_signal in enumerate(sweep_signals):
-        filtered_signal = frequency_domain_filter(sweep_signal, G[i,:])
+        # filtered_signal = lfilter(g[i,:], 1.0, sweep_signal)
+        filtered_signal = filter_signal_stft(sweep_signal, G[i,:])
         filtered_signals.append(filtered_signal)
         write(wav_directory + f"post_calib_pos{i}.wav", fs, filtered_signal)      
 
@@ -397,7 +413,7 @@ if __name__ == "__main__":
     
     a, p = calculate_evaluation_metrics(fft(sweep_signals, axis=1))
     a2, p2 = calculate_evaluation_metrics(fft(filtered_signals, axis=1))
-    print("before calibration: ",a, p)
+    print("before calibration: ", a, p)
     print("After calibration: ", a2, p2)
 
     cc1, shift1 = gcc_phat(sweep_signals[0], sweep_signals[1], max_tau=None, interp=1)

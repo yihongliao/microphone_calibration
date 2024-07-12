@@ -26,8 +26,8 @@ def generate_white_noise_with_silence(duration_noise, duration_silence, sample_r
     write(filename, sample_rate, signal)
 
 # Parameters
-duration_noise = 20  # 10 seconds of white noise
-duration_silence = 10  # 10 seconds of silence at the beginning
+duration_noise = 2  # 10 seconds of white noise
+duration_silence = 0  # 10 seconds of silence at the beginning
 sample_rate = 44100  # CD quality sample rate
 filename = f"../signal/white_noise_with_{duration_silence}s_silence.wav"
 

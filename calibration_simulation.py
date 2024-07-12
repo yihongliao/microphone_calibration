@@ -477,8 +477,8 @@ if __name__ == "__main__":
                     # We invert Sabine's formula to obtain the parameters for the ISM simulator
                     e_absorption, max_order = pra.inverse_sabine(rt60_tgt, room_dim)
 
-                    mic_array_movements = generate_mic_array_movements(2, 2, d, precision)
-                    mic_array_initial_loc = generate_mic_initial_locations(2, 2, d, np.array([2.45, 3.3, 1.3]))
+                    mic_array_movements = generate_mic_array_movements(int(np.sqrt(num_of_mics)), int(np.sqrt(num_of_mics)), d, precision)
+                    mic_array_initial_loc = generate_mic_initial_locations(int(np.sqrt(num_of_mics)), int(np.sqrt(num_of_mics)), d, np.array([2.45, 3.3, 1.3]))
 
                     if add_noise:
                         print("Noise added, Denoise: ", denoise)
@@ -643,7 +643,7 @@ if __name__ == "__main__":
                     g, G = AFRC(aligned_and_cropped_signals, K, remove_spike)
 
                     np.savetxt(f"simulation_calibrations/p_{precision}/G_{SNR}_{rt60_tgt}_{T}.txt", G.view(float))
-                    # np.savetxt(f"simulation_calibrations/p_{precision}/g_{SNR}_{rt60_tgt}_{T}_2.txt", g.view(float))
+                    np.savetxt(f"simulation_calibrations/p_{precision}/g_{SNR}_{rt60_tgt}_{T}_time.txt", g.view(float))
 
 
                 if evaluate:
